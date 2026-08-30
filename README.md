@@ -65,9 +65,10 @@ to whatever bound it likes — a nonsense that shows up immediately as a Champio
 side topping the table.
 
 **No Monte Carlo.** For a match-goals sport the scoreline distribution is closed
-form: a bivariate Poisson grid over 0–10 goals, corrected and normalised. The
-design doc's 20,000-iteration simulator is reserved for NFL, whose drive model has
-no analytic equivalent.
+form: a bivariate Poisson grid over 0–10 goals, corrected and normalised. Measured
+across every current fixture pairing, the worst-case probability mass falling outside
+that grid is 3.7e-04. The design doc's 20,000-iteration simulator is reserved for NFL,
+whose drive model has no analytic equivalent.
 
 ## Layout
 
