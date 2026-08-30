@@ -33,134 +33,132 @@
 }
 
 *{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:64px}
 body{
   margin:0; background:var(--ground); color:var(--ink);
   font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  font-size:15px; line-height:1.55;
-  -webkit-font-smoothing:antialiased;
+  font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:1120px; margin:0 auto; padding:32px 20px 72px}
-h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif; text-wrap:balance; margin:0}
+h1,h2,h3,h4{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif; text-wrap:balance; margin:0}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
-.eyebrow{
-  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--muted);
+code{font-family:"IBM Plex Mono",monospace; font-size:.9em; background:var(--surface-2); padding:1px 5px; border-radius:4px}
+
+/* ---------- sticky chrome ---------- */
+.topbar{
+  position:sticky; top:0; z-index:40; background:color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--line);
 }
+.topbar .inner{max-width:1160px; margin:0 auto; padding:0 22px;
+  display:flex; align-items:center; gap:22px; height:56px}
+.brand{font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:17px;
+  letter-spacing:-.02em; white-space:nowrap}
+.brand em{font-style:normal; color:var(--muted); font-weight:500}
+nav{display:flex; gap:2px; margin-left:auto; overflow-x:auto; scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav a{
+  color:var(--muted); text-decoration:none; font-size:13px; padding:6px 11px;
+  border-radius:7px; white-space:nowrap; transition:color .15s, background .15s;
+}
+nav a:hover{color:var(--ink); background:var(--surface-2)}
+nav a.on{color:var(--ink); background:var(--surface-2); font-weight:500}
+nav a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.livedot{display:inline-flex; align-items:center; gap:6px; font-family:"IBM Plex Mono",monospace;
+  font-size:11px; color:var(--muted); white-space:nowrap}
+.livedot i{width:7px; height:7px; border-radius:50%; background:var(--ok)}
+.livedot.bad i{background:var(--away)}
 
-/* ---------- header ---------- */
-header{display:flex; flex-wrap:wrap; gap:16px 24px; align-items:flex-end; justify-content:space-between; margin-bottom:8px}
-h1{font-size:clamp(28px,4vw,40px); font-weight:800; letter-spacing:-.02em; line-height:1.05}
-h1 .sub{display:block; font-size:14px; font-weight:500; letter-spacing:0; color:var(--muted); margin-top:8px; font-family:"IBM Plex Sans",sans-serif}
-.meta{display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--surface)}
-.meta div{padding:8px 14px; border-right:1px solid var(--line)}
-.meta div:last-child{border-right:0}
-.meta dt{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0}
-.meta dd{margin:2px 0 0; font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:500; font-variant-numeric:tabular-nums}
+.wrap{max-width:1160px; margin:0 auto; padding:0 22px 90px}
 
-/* ---------- controls ---------- */
-.picker{
-  display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:end;
+/* ---------- section rhythm ---------- */
+section.band{padding:44px 0 8px; scroll-margin-top:64px}
+section.band + section.band{border-top:1px solid var(--line)}
+.shead{margin-bottom:22px; max-width:70ch}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); display:block; margin-bottom:9px}
+.shead h2{font-size:clamp(22px,3vw,30px); font-weight:800; letter-spacing:-.025em; line-height:1.1}
+.shead p{margin:9px 0 0; color:var(--ink-2); font-size:14.5px}
+
+/* ---------- intro ---------- */
+.intro{padding:52px 0 8px}
+.intro h1{font-size:clamp(32px,5.4vw,52px); font-weight:800; letter-spacing:-.035em; line-height:1.02}
+.intro p{margin:16px 0 0; font-size:17px; color:var(--ink-2); max-width:62ch; line-height:1.55}
+.intro .keys{display:flex; flex-wrap:wrap; gap:8px; margin-top:22px}
+.intro .keys span{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-2);
+  background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:5px 12px}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:20px; box-shadow:var(--shadow)}
+.card h3{font-size:14px; font-weight:700; letter-spacing:-.005em; margin-bottom:2px}
+.card .note{font-size:12.5px; color:var(--muted); margin:0 0 15px}
+
+/* ---------- forecast ---------- */
+.picker{display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:end;
   background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
-  padding:16px; margin:24px 0; box-shadow:var(--shadow);
-}
+  padding:16px; margin-bottom:16px; box-shadow:var(--shadow)}
 .field{display:flex; flex-direction:column; gap:6px; min-width:0}
-label{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-family:"IBM Plex Mono",monospace}
-select{
-  font:inherit; font-size:16px; font-weight:500; color:var(--ink);
+label{font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted);
+  font-family:"IBM Plex Mono",monospace}
+select{font:inherit; font-size:16px; font-weight:500; color:var(--ink);
   background:var(--surface-2); border:1px solid var(--line-2); border-radius:8px;
   padding:10px 12px; width:100%; cursor:pointer; appearance:none;
   background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
   background-position:calc(100% - 18px) 51%, calc(100% - 13px) 51%;
-  background-size:5px 5px,5px 5px; background-repeat:no-repeat; padding-right:38px;
-}
+  background-size:5px 5px,5px 5px; background-repeat:no-repeat; padding-right:38px}
 button{font:inherit; cursor:pointer; color:var(--ink)}
-#swap{
-  background:var(--surface-2); border:1px solid var(--line-2); border-radius:8px;
+#swap{background:var(--surface-2); border:1px solid var(--line-2); border-radius:8px;
   width:42px; height:42px; font-size:17px; line-height:1; display:grid; place-items:center;
-  transition:background .15s, transform .2s;
-}
+  transition:background .15s, transform .25s}
 #swap:hover{background:var(--ground); transform:rotate(180deg)}
 select:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 
-/* ---------- hero ---------- */
-.hero{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); gap:20px; align-items:start}
-.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:20px; box-shadow:var(--shadow)}
-.card h2{font-size:15px; font-weight:700; letter-spacing:-.01em; margin-bottom:2px}
-.card .note{font-size:12.5px; color:var(--muted); margin:0 0 16px}
-
-/* outcome numbers */
-.outcomes{display:grid; grid-template-columns:repeat(3,1fr); gap:2px; margin-bottom:14px}
-.oc{padding:12px 6px; text-align:center; border-radius:6px; background:var(--surface-2)}
-.oc .k{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:5px}
+.fc{display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:16px; align-items:start}
+.outcomes{display:grid; grid-template-columns:repeat(3,1fr); gap:2px; margin-bottom:12px}
+.oc{padding:13px 6px; text-align:center; border-radius:7px; background:var(--surface-2)}
+.oc .k{font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted);
+  display:flex; align-items:center; justify-content:center; gap:5px}
 .oc .k i{width:8px; height:8px; border-radius:2px; display:inline-block}
-.oc .v{font-family:"IBM Plex Mono",monospace; font-size:clamp(22px,3.4vw,30px); font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.02em; margin-top:4px}
+.oc .v{font-family:"IBM Plex Mono",monospace; font-size:clamp(21px,3vw,29px); font-weight:600;
+  font-variant-numeric:tabular-nums; letter-spacing:-.025em; margin-top:4px}
 .oc.h .k i{background:var(--home)} .oc.d .k i{background:var(--draw)} .oc.a .k i{background:var(--away)}
-
-/* stacked probability bar: 2px surface gaps, direct labels */
-.bar{display:flex; height:34px; gap:2px; margin-bottom:16px}
-.bar span{
-  display:grid; place-items:center; font-family:"IBM Plex Mono",monospace;
+.bar{display:flex; height:32px; gap:2px; margin-bottom:14px}
+.bar span{display:grid; place-items:center; font-family:"IBM Plex Mono",monospace;
   font-size:12px; font-weight:600; color:#fff; overflow:hidden; min-width:0;
-  transition:flex-basis .35s cubic-bezier(.4,0,.2,1);
-}
+  transition:flex-basis .35s cubic-bezier(.4,0,.2,1)}
 .bar span:first-child{border-radius:5px 2px 2px 5px}
 .bar span:last-child{border-radius:2px 5px 5px 2px}
-/* Shared by the outcome bar and the fixture-list splits: scoping these to
-   .bar left the fixture splits with white text on no background. */
 .bar .bh, .up .split .bh{background:var(--home)}
 .bar .bd, .up .split .bd{background:var(--draw)}
 .bar .ba, .up .split .ba{background:var(--away)}
-
-.xg{display:grid; grid-template-columns:1fr 1fr; gap:2px}
-.xg div{background:var(--surface-2); border-radius:6px; padding:10px 12px}
-.xg dt{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0}
-.xg dd{margin:2px 0 0; font-family:"IBM Plex Mono",monospace; font-size:20px; font-weight:600; font-variant-numeric:tabular-nums}
+.xg{display:grid; grid-template-columns:1fr 1fr; gap:2px; margin-bottom:14px}
+.xg div{background:var(--surface-2); border-radius:7px; padding:10px 12px}
+.xg dt{font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); margin:0}
+.xg dd{margin:2px 0 0; font-family:"IBM Plex Mono",monospace; font-size:20px; font-weight:600;
+  font-variant-numeric:tabular-nums}
 
 /* ---------- score matrix ---------- */
 .gridwrap{overflow-x:auto}
 table.mx{border-collapse:separate; border-spacing:2px; margin:0 auto}
-table.mx th{font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:500; color:var(--muted); padding:0; width:30px; height:22px}
-table.mx th.corner{font-size:9.5px; letter-spacing:.06em}
-table.mx td{
-  width:30px; height:30px; border-radius:4px; padding:0; text-align:center; vertical-align:middle;
-  font-family:"IBM Plex Mono",monospace; font-size:9.5px; font-variant-numeric:tabular-nums;
-  cursor:default; position:relative; transition:transform .12s;
-}
-table.mx td:hover{transform:scale(1.18); z-index:3; box-shadow:0 0 0 2px var(--surface),0 2px 8px #0003}
+table.mx th{font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:500;
+  color:var(--muted); padding:0; width:33px; height:22px}
+table.mx th.corner{font-size:9px; letter-spacing:.05em}
+table.mx td{width:33px; height:33px; border-radius:5px; padding:0; text-align:center;
+  vertical-align:middle; font-family:"IBM Plex Mono",monospace; font-size:10px;
+  font-variant-numeric:tabular-nums; cursor:default; position:relative; transition:transform .12s}
+table.mx td:hover{transform:scale(1.16); z-index:3; box-shadow:0 0 0 2px var(--surface),0 2px 8px #0004}
 table.mx td.peak{box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--ink)}
-.axis{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:10px}
 .legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:14px; font-size:12px; color:var(--ink-2)}
 .legend span{display:flex; align-items:center; gap:6px}
 .legend i{width:10px; height:10px; border-radius:2px; display:inline-block}
-
-#tip{
-  position:fixed; pointer-events:none; opacity:0; transition:opacity .12s;
-  background:var(--ink); color:var(--ground); font-family:"IBM Plex Mono",monospace;
-  font-size:12px; padding:6px 9px; border-radius:6px; z-index:50; white-space:nowrap;
-}
-
-/* ---------- lower sections ---------- */
-section{margin-top:20px}
-.two{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px}
-table.data{width:100%; border-collapse:collapse; font-size:13.5px}
-table.data th{
-  text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--muted); font-weight:500;
-  padding:0 8px 8px; border-bottom:1px solid var(--line);
-}
-table.data td{padding:7px 8px; border-bottom:1px solid var(--line)}
-table.data tr:last-child td{border-bottom:0}
-table.data td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; text-align:right}
-.rankbar{position:relative}
-.rankbar .fill{position:absolute; inset:0 auto 0 0; border-radius:2px; opacity:.16}
-.rankbar span{position:relative}
 .scorelist{display:flex; flex-direction:column; gap:2px}
-.scorelist .row{display:grid; grid-template-columns:56px 1fr 52px; gap:10px; align-items:center; padding:6px 8px; border-radius:6px; background:var(--surface-2)}
+.scorelist .row{display:grid; grid-template-columns:52px 1fr 50px; gap:10px; align-items:center;
+  padding:6px 9px; border-radius:6px; background:var(--surface-2)}
 .scorelist .sc{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:14px}
 .scorelist .track{height:7px; border-radius:4px; background:var(--line); overflow:hidden}
 .scorelist .track i{display:block; height:100%; border-radius:4px}
 .scorelist .pc{font-family:"IBM Plex Mono",monospace; font-size:12.5px; text-align:right; color:var(--ink-2)}
-
+#tip{position:fixed; pointer-events:none; opacity:0; transition:opacity .12s; background:var(--ink);
+  color:var(--ground); font-family:"IBM Plex Mono",monospace; font-size:12px; padding:6px 9px;
+  border-radius:6px; z-index:60; white-space:nowrap}
 /* ---------- schedule ---------- */
 .day{margin-bottom:18px}
 .day h3{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.12em;
@@ -251,138 +249,203 @@ svg.plot .ref{stroke:var(--line-2); stroke-width:1.5; stroke-dasharray:4 4}
 footer{margin-top:28px; font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 18px}
 code{font-family:"IBM Plex Mono",monospace; font-size:.92em; background:var(--surface-2); padding:1px 5px; border-radius:4px}
 
-@media (max-width:860px){
-  .hero,.two{grid-template-columns:1fr}
-  .picker{grid-template-columns:1fr auto 1fr}
+
+/* ---------- ratings ---------- */
+.rt{display:grid; grid-template-columns:26px minmax(96px,1fr) minmax(160px,2.4fr) 66px;
+  gap:12px; align-items:center; padding:5px 9px; border-radius:6px; font-size:13.5px}
+.rt:hover{background:var(--surface-2)}
+.rt .rk{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted); text-align:right}
+.rt .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.rt .nm small{color:var(--muted); font-size:10.5px; margin-left:5px}
+.rt .track{position:relative; height:15px}
+.rt .track .zero{position:absolute; left:50%; top:-3px; bottom:-3px; width:1px;
+  background:var(--line-2)}
+.rt .track .b{position:absolute; top:2px; height:11px; border-radius:3px}
+.rt .b.pos{left:50%; background:var(--home)}
+.rt .b.neg{right:50%; background:var(--away)}
+.rt .val{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;
+  text-align:right; font-size:12.5px}
+.rthead{display:grid; grid-template-columns:26px minmax(96px,1fr) minmax(160px,2.4fr) 66px;
+  gap:12px; padding:0 9px 8px; border-bottom:1px solid var(--line); margin-bottom:6px;
+  font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--muted)}
+.rthead span:last-child{text-align:right}
+.rthead span:nth-child(3){text-align:center}
+
+/* ---------- footer ---------- */
+footer{margin-top:52px; padding-top:24px; border-top:1px solid var(--line)}
+.prov{display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--line); border-radius:var(--r);
+  overflow:hidden; background:var(--surface); margin-bottom:18px}
+.prov div{padding:11px 16px; border-right:1px solid var(--line); flex:1 1 auto}
+.prov div:last-child{border-right:0}
+.prov dt{font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); margin:0}
+.prov dd{margin:3px 0 0; font-family:"IBM Plex Mono",monospace; font-size:15px; font-weight:500;
+  font-variant-numeric:tabular-nums}
+.colophon{display:flex; flex-wrap:wrap; gap:7px 18px; font-size:12.5px; color:var(--muted)}
+
+@media (max-width:900px){
+  .fc,.cols,.two,.charts{grid-template-columns:1fr!important}
+  .rt,.rthead{grid-template-columns:24px 1fr 78px}
+  .rt .track{display:none}
+  .brand em{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
 </style>
 
+<div class="topbar"><div class="inner">
+  <span class="brand">HyPz <em>Fixture Model</em></span>
+  <nav>
+    <a href="#fixtures">Fixtures</a>
+    <a href="#forecast">Forecast</a>
+    <a href="#ratings">Ratings</a>
+    <a href="#accuracy">Accuracy</a>
+  </nav>
+  <span class="livedot" id="livedot"><i></i><span id="livetext">&nbsp;</span></span>
+</div></div>
+
 <div class="wrap">
-<header>
-  <h1>HyPz Fixture Model
-    <span class="sub">Dixon–Coles bivariate Poisson · Premier League</span>
-  </h1>
-  <dl class="meta">
-    <div><dt>Matches</dt><dd id="m-n"></dd></div>
-    <div><dt>Seasons</dt><dd id="m-s"></dd></div>
-    <div><dt>Fitted to</dt><dd id="m-d"></dd></div>
-    <div><dt>Home adv</dt><dd id="m-h"></dd></div>
-    <div><dt>ρ</dt><dd id="m-r"></dd></div>
-  </dl>
-</header>
 
-<div class="picker">
-  <div class="field">
-    <label for="home">Home team</label>
-    <select id="home"></select>
-  </div>
-  <button id="swap" title="Swap home and away" aria-label="Swap home and away">⇄</button>
-  <div class="field">
-    <label for="away">Away team</label>
-    <select id="away"></select>
-  </div>
+<div class="intro">
+  <h1>Premier League fixtures,<br>forecast as distributions.</h1>
+  <p>Every figure here is a share of the modelled distribution &mdash; never a single
+     predicted scoreline. Fitted with Dixon&ndash;Coles on every Premier League match
+     since 1993, and measured against the market it does not beat.</p>
+  <div class="keys" id="introkeys"></div>
 </div>
 
-<div class="hero">
-  <div class="card">
-    <h2 id="fixture-title">Result probability</h2>
-    <p class="note">Every figure is a share of the modelled distribution, not a prediction.</p>
-    <div class="outcomes">
-      <div class="oc h"><div class="k"><i></i>Home</div><div class="v" id="p-h"></div></div>
-      <div class="oc d"><div class="k"><i></i>Draw</div><div class="v" id="p-d"></div></div>
-      <div class="oc a"><div class="k"><i></i>Away</div><div class="v" id="p-a"></div></div>
-    </div>
-    <div class="bar" id="bar" role="img" aria-label="Outcome probability split"></div>
-    <dl class="xg">
-      <div><dt id="xg-hl">Home expected goals</dt><dd id="xg-h"></dd></div>
-      <div><dt id="xg-al">Away expected goals</dt><dd id="xg-a"></dd></div>
-    </dl>
+<section class="band" id="fixtures">
+  <div class="shead">
+    <span class="eyebrow">Fixtures</span>
+    <h2>Recent results and what is coming</h2>
+    <p id="sched-note"></p>
   </div>
-
-  <div class="card">
-    <h2>Scoreline distribution</h2>
-    <p class="note">Hue marks the outcome, depth the probability. The draw diagonal is geometry, not decoration.</p>
-    <div class="gridwrap"><table class="mx" id="mx"></table></div>
-    <div class="legend">
-      <span><i style="background:var(--home)"></i>Home win</span>
-      <span><i style="background:var(--draw)"></i>Draw</span>
-      <span><i style="background:var(--away)"></i>Away win</span>
-      <span style="color:var(--muted)">Ringed cell = likeliest score</span>
-    </div>
-  </div>
-</div>
-
-<section class="card" style="margin-top:20px" id="schedule-card" hidden>
-  <h2>Schedule<span class="pill p-ok" id="hz-state"></span></h2>
-  <p class="note" id="sched-note"></p>
   <div id="schedule"></div>
   <p class="caveat" id="sched-caveat"></p>
   <div class="hz" id="hz"></div>
 </section>
 
-<div class="two">
-  <section class="card">
-    <h2>Likeliest scorelines</h2>
-    <p class="note">Top six of the 121-cell grid.</p>
-    <div class="scorelist" id="top"></div>
-  </section>
+<section class="band" id="forecast">
+  <div class="shead">
+    <span class="eyebrow">Forecast</span>
+    <h2 id="fixture-title">Any matchup</h2>
+    <p>Pick two teams. The scoreline grid is closed form, so this recomputes in the
+       browser rather than asking a server.</p>
+  </div>
 
-  <section class="card">
-    <h2>2026/27 so far</h2>
-    <p class="note">Results already played this season.</p>
-    <div style="overflow-x:auto"><table class="data" id="played"></table></div>
-  </section>
-</div>
+  <div class="picker">
+    <div class="field"><label for="home">Home team</label><select id="home"></select></div>
+    <button id="swap" title="Swap home and away" aria-label="Swap home and away">&#8646;</button>
+    <div class="field"><label for="away">Away team</label><select id="away"></select></div>
+  </div>
 
-<section class="card" style="margin-top:20px">
-  <h2>Fitted team ratings</h2>
-  <p class="note">Attack and defence in log-goal units. Weight is decayed matches of evidence behind each rating — promoted sides carry less. Lower defence is better.</p>
-  <div style="overflow-x:auto"><table class="data" id="ratings"></table></div>
-</section>
+  <div class="fc">
+    <div class="card">
+      <h3>Scoreline distribution</h3>
+      <p class="note">Hue marks the outcome, depth the probability. The draw diagonal
+         is geometry, not decoration.</p>
+      <div class="gridwrap"><table class="mx" id="mx"></table></div>
+      <div class="legend">
+        <span><i style="background:var(--home)"></i>Home win</span>
+        <span><i style="background:var(--draw)"></i>Draw</span>
+        <span><i style="background:var(--away)"></i>Away win</span>
+        <span style="color:var(--muted)">Ringed = likeliest</span>
+      </div>
+    </div>
 
-<section class="card" style="margin-top:20px">
-  <h2>Walk-forward validation</h2>
-  <p class="note" id="bt-window"></p>
-  <table class="score" id="scorecard"></table>
-
-  <div class="charts">
-    <figure>
-      <svg class="plot" id="calplot" viewBox="0 0 300 300" role="img"
-           aria-label="Calibration curve: predicted probability against observed frequency"></svg>
-      <figcaption>Of everything forecast at <span class="mono">p</span>, how often did it happen? The dashed line is
-        perfect calibration; marker area is sample size. All three outcomes pooled.</figcaption>
-    </figure>
-    <figure>
-      <svg class="plot" id="seasonplot" viewBox="0 0 420 300" role="img"
-           aria-label="Brier score by season, model against market"></svg>
-      <figcaption>Brier score by season, lower is better. The market wins almost every year by a
-        consistent margin — which is itself reassuring: a model that suddenly beat the closing line
-        would more likely mean a leak than an edge.</figcaption>
-    </figure>
+    <div style="display:grid; gap:16px">
+      <div class="card">
+        <h3>Result probability</h3>
+        <p class="note">Shares of the distribution, not a prediction.</p>
+        <div class="outcomes">
+          <div class="oc h"><div class="k"><i></i>Home</div><div class="v" id="p-h"></div></div>
+          <div class="oc d"><div class="k"><i></i>Draw</div><div class="v" id="p-d"></div></div>
+          <div class="oc a"><div class="k"><i></i>Away</div><div class="v" id="p-a"></div></div>
+        </div>
+        <div class="bar" id="bar" role="img" aria-label="Outcome probability split"></div>
+        <dl class="xg">
+          <div><dt id="xg-hl">Home expected goals</dt><dd id="xg-h"></dd></div>
+          <div><dt id="xg-al">Away expected goals</dt><dd id="xg-a"></dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Likeliest scorelines</h3>
+        <p class="note">Top six of the 121-cell grid.</p>
+        <div class="scorelist" id="top"></div>
+      </div>
+    </div>
   </div>
 </section>
 
-<div class="status">
-  <h3>What these numbers mean</h3>
-  <p>The model clears both bars the design set for shipping: it beats the base rate on every proper scoring
-    rule, and it beats “the home team wins” on accuracy by nine points. Calibration is the part that
-    matters most for using the output — <span class="mono" id="s-ece"></span> expected calibration error
-    means that when it says 30%, it happens close to 30% of the time.</p>
-  <p>It does not beat the closing line, and was never expected to. The gap is small and stable at roughly
-    0.01–0.02 Brier per season.</p>
-  <p><strong>One caveat worth knowing.</strong> Accuracy barely discriminates here. The model names a draw as
-    the single likeliest result <span class="mono" id="s-draws"></span> times in
-    <span class="mono" id="s-n"></span>, because a draw's probability tops out near 0.37 and a favoured
-    side's exceeds that. Its top pick is therefore <span class="mono">99.5%</span> identical to “the stronger
-    team wins”. Judge it on Brier, log loss and calibration, not on how often it calls the winner.</p>
-</div>
+<section class="band" id="ratings">
+  <div class="shead">
+    <span class="eyebrow">Ratings</span>
+    <h2>Who the model rates, and by how much</h2>
+    <p>Net strength in log-goal units, attack minus defence. Bars run from a common
+       zero so the spread between sides is the thing you read, not the numbers.
+       Teams with too little recent evidence are excluded rather than shown at the prior.</p>
+  </div>
+  <div class="card">
+    <div class="rthead"><span>#</span><span>Team</span><span>Weaker &nbsp;&#8212;&nbsp; Stronger</span><span>Net</span></div>
+    <div id="ratings-list"></div>
+  </div>
+</section>
+
+<section class="band" id="accuracy">
+  <div class="shead">
+    <span class="eyebrow">Accuracy</span>
+    <h2>Measured, not asserted</h2>
+    <p id="bt-window"></p>
+  </div>
+  <div class="card">
+    <table class="score" id="scorecard"></table>
+    <div class="charts">
+      <figure>
+        <svg class="plot" id="calplot" viewBox="0 0 300 300" role="img"
+             aria-label="Calibration curve: predicted probability against observed frequency"></svg>
+        <figcaption>Of everything forecast at <span class="mono">p</span>, how often did it
+          happen? The dashed line is perfect calibration; marker area is sample size.</figcaption>
+      </figure>
+      <figure>
+        <svg class="plot" id="seasonplot" viewBox="0 0 420 300" role="img"
+             aria-label="Brier score by season, model against market"></svg>
+        <figcaption>Brier by season, lower is better. The market wins almost every year by a
+          consistent margin &mdash; itself reassuring: a model that suddenly beat the closing
+          line would more likely mean a leak than an edge.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <div class="status">
+    <h3>What these numbers mean</h3>
+    <p>It clears both bars set for shipping: it beats the base rate on every proper scoring
+      rule, and beats &ldquo;the home team wins&rdquo; on accuracy by nine points. Calibration
+      matters most for using the output &mdash; <span class="mono" id="s-ece"></span> expected
+      calibration error means that when it says 30%, it happens close to 30% of the time.</p>
+    <p>It does not beat the closing line, and was never expected to. The gap is small and
+      stable at roughly 0.01&ndash;0.02 Brier per season.</p>
+    <p><strong>One caveat worth knowing.</strong> Accuracy barely discriminates here. A draw is
+      named likeliest only <span class="mono" id="s-draws"></span> times in
+      <span class="mono" id="s-n"></span>, because a draw&rsquo;s probability tops out near 0.37
+      and a favoured side&rsquo;s exceeds it. The top pick is therefore
+      <span class="mono">99.5%</span> identical to &ldquo;the stronger team wins&rdquo;.</p>
+  </div>
+</section>
 
 <footer>
-  <span class="mono" id="f-v"></span>
-  <span>Data: football-data.co.uk</span>
-  <span>Dixon &amp; Coles (1997)</span>
-  <span>270-day half-life</span>
+  <dl class="prov">
+    <div><dt>Matches</dt><dd id="m-n"></dd></div>
+    <div><dt>Seasons</dt><dd id="m-s"></dd></div>
+    <div><dt>Fitted to</dt><dd id="m-d"></dd></div>
+    <div><dt>Home advantage</dt><dd id="m-h"></dd></div>
+    <div><dt>Low-score &rho;</dt><dd id="m-r"></dd></div>
+  </dl>
+  <div class="colophon">
+    <span class="mono" id="f-v"></span>
+    <span>Results: football-data.co.uk</span>
+    <span>Lineups: Highlightly</span>
+    <span>Dixon &amp; Coles (1997)</span>
+    <span>270-day half-life</span>
+  </div>
 </footer>
 </div>
 
@@ -395,6 +458,9 @@ const MAXG = 10;
 const F = [1,1,2,6,24,120,720,5040,40320,362880,3628800];
 
 const fmt = p => (p*100).toFixed(1) + "%";
+const pct = v => (v*100).toFixed(0) + "%";
+const esc = t => String(t).replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 function rates(h, a){
@@ -534,33 +600,46 @@ setText("m-h", M.home_adv.toFixed(3));
 setText("m-r", M.rho.toFixed(3));
 setText("f-v", M.model_version);
 
+// Headline facts belong where someone lands, not in a jargon strip.
+document.getElementById("introkeys").innerHTML = [
+  `${M.n_matches.toLocaleString()} matches`,
+  `${M.seasons} seasons`,
+  `${M.current_teams.length} teams`,
+  M.evaluation ? `${M.evaluation.n.toLocaleString()} forecasts back-tested` : null,
+  M.evaluation ? `Brier ${M.evaluation.brier.toFixed(4)}` : null,
+].filter(Boolean).map(t => `<span>${t}</span>`).join("");
+
+// Highlight whichever section is in view.
+const navLinks = [...document.querySelectorAll("nav a")];
+const spy = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    navLinks.forEach(a =>
+      a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id));
+  });
+}, {rootMargin: "-56px 0px -70% 0px", threshold: 0});
+document.querySelectorAll("section.band").forEach(sec => spy.observe(sec));
+
 const live = M.teams.filter(t => t.weight >= 5)
   .map(t => ({...t, net: t.attack - t.defence})).sort((a, b) => b.net - a.net);
-const span = Math.max(...live.map(t => Math.abs(t.net)));
-document.getElementById("ratings").innerHTML =
-  "<tr><th>#</th><th>Team</th><th style='text-align:right'>Attack</th><th style='text-align:right'>Defence</th>" +
-  "<th style='text-align:right'>Net</th><th style='text-align:right'>Weight</th></tr>" +
-  live.map((t, k) => `<tr>
-    <td class="n" style="color:var(--muted)">${k+1}</td>
-    <td>${t.name}${current.includes(t.name) ? "" : " <span style='color:var(--muted);font-size:11px'>(relegated)</span>"}</td>
-    <td class="n">${t.attack.toFixed(3)}</td>
-    <td class="n">${t.defence.toFixed(3)}</td>
-    <td class="n rankbar"><span class="fill" style="width:${(Math.abs(t.net)/span*100).toFixed(0)}%;background:var(${t.net >= 0 ? "--home" : "--away"})"></span><span>${t.net >= 0 ? "+" : ""}${t.net.toFixed(3)}</span></td>
-    <td class="n" style="color:var(--muted)">${t.weight.toFixed(0)}</td></tr>`).join("");
-
-document.getElementById("played").innerHTML =
-  "<tr><th>Date</th><th>Home</th><th style='text-align:center'>Score</th><th>Away</th></tr>" +
-  M.played.map(g => `<tr>
-    <td class="n" style="color:var(--muted);text-align:left">${g.d.slice(5)}</td>
-    <td style="font-weight:${g.hs > g.asc_ ? 600 : 400}">${g.h}</td>
-    <td class="n" style="text-align:center">${g.hs}&ndash;${g.asc_}</td>
-    <td style="font-weight:${g.asc_ > g.hs ? 600 : 400}">${g.a}</td></tr>`).join("");
+const spanMax = Math.max(...live.map(t => Math.abs(t.net))) || 1;
+const currentSet = new Set(M.current_teams);
+document.getElementById("ratings-list").innerHTML = live.map((t, k) => {
+  const pos = t.net >= 0;
+  const w = (Math.abs(t.net) / spanMax * 50).toFixed(1);
+  const thin = t.weight < 30 && currentSet.has(t.name);
+  return `<div class="rt" title="attack ${t.attack.toFixed(3)}, defence ${t.defence.toFixed(3)}, ${t.weight.toFixed(0)} decayed matches">
+    <span class="rk">${k + 1}</span>
+    <span class="nm">${esc(t.name)}${currentSet.has(t.name) ? "" : ' <small>relegated</small>'}${
+      thin ? ' <small>thin record</small>' : ""}</span>
+    <span class="track"><i class="zero"></i><i class="b ${pos ? "pos" : "neg"}" style="width:${w}%"></i></span>
+    <span class="val">${pos ? "+" : ""}${t.net.toFixed(3)}</span>
+  </div>`;
+}).join("");
 
 try { render(); } catch (e) { console.error('render failed', e); }
 
 // ---------- schedule ----------
-const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const pct = v => (v*100).toFixed(0) + "%";
 
 function formStrip(f){
   if (!f || !f.played) return `<span class="none">no recent matches in this division</span>`;
@@ -648,14 +727,17 @@ function gameDetail(g){
 }
 
 if (M.schedule && M.schedule.count){
-  document.getElementById("schedule-card").hidden = false;
   const S = M.schedule;
+  const nplayed = S.days.flatMap(d => d.games).filter(g => g.status === "final").length;
   document.getElementById("sched-note").textContent =
-    `${S.count} fixtures from ${S.from} to ${S.to}. Open a match for form, head to head and statistics.`;
+    `${nplayed} played and ${S.count - nplayed} upcoming, ${S.from} to ${S.to}. ` +
+    `Open any match for form, head to head, lineups and statistics.`;
   document.getElementById("schedule").innerHTML = S.days.map(day => {
     const heading = new Date(day.date + "T00:00:00Z").toLocaleDateString("en-GB",
       {weekday:"long", day:"numeric", month:"long", timeZone:"UTC"});
-    return `<div class="day"><h3>${heading}</h3>` + day.games.map(g => {
+    const isToday = day.date === S.today
+      ? ` <span style="color:var(--accent)">&middot; today</span>` : "";
+    return `<div class="day"><h3>${heading}${isToday}</h3>` + day.games.map(g => {
       const played = g.status === "final" && g.result;
       const right = played
         ? `<span class="ft">${g.result.score.home}&ndash;${g.result.score.away}</span>`
@@ -683,9 +765,9 @@ if (M.schedule && M.schedule.count){
 }
 
 if (M.health){
-  const st = document.getElementById("hz-state");
-  st.textContent = "pipeline " + M.health.state;
-  st.className = "pill " + (M.health.state === "ok" ? "p-ok" : "p-bad");
+  document.getElementById("livedot").className =
+    "livedot" + (M.health.state === "ok" ? "" : " bad");
+  setText("livetext", "pipeline " + M.health.state);
   document.getElementById("hz").innerHTML = M.health.jobs.map(j =>
     `<span class="j ${j.state}"><i></i>${j.job}<em>${
       j.age_hours === null ? "never" : j.age_hours < 1 ? "just now" : j.age_hours.toFixed(0)+"h ago"

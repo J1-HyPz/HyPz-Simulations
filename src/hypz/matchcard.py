@@ -250,10 +250,16 @@ def card(game_id: str, sport_id: str = "pl") -> dict | None:
         return out
 
 
-def schedule(sport_id: str = "pl", days: int = 7, today: str | None = None) -> dict:
-    """Fixtures from today through `days` ahead, each with its card."""
-    start = today or date.today().isoformat()
-    end = (date.fromisoformat(start) + timedelta(days=days)).isoformat()
+def schedule(sport_id: str = "pl", days: int = 7, today: str | None = None,
+             back: int = 7) -> dict:
+    """Fixtures around today: `back` days of results, `days` ahead of fixtures.
+
+    Showing both is how anyone actually reads a football schedule, and it means
+    recent results do not need a separate panel repeating the same rows.
+    """
+    now = today or date.today().isoformat()
+    start = (date.fromisoformat(now) - timedelta(days=back)).isoformat()
+    end = (date.fromisoformat(now) + timedelta(days=days)).isoformat()
     with connect() as conn:
         ids = [r["game_id"] for r in conn.execute(
             "SELECT game_id FROM games WHERE sport_id=? AND date_utc >= ? AND date_utc <= ? "
@@ -263,7 +269,7 @@ def schedule(sport_id: str = "pl", days: int = 7, today: str | None = None) -> d
     for g in games:
         by_day.setdefault(g["date"], []).append(g)
     return {
-        "from": start, "to": end, "count": len(games),
+        "from": start, "to": end, "today": now, "count": len(games),
         "days": [{"date": d, "games": by_day[d]} for d in sorted(by_day)],
         "unavailable": limitations(),
     }

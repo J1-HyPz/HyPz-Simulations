@@ -113,7 +113,7 @@ def build_payload(sport_id: str = "pl", season: str = "2026/27",
         health = None
 
     try:
-        sched = matchcard.schedule(sport_id, days=7)
+        sched = matchcard.schedule(sport_id, days=7, back=7)
     except Exception as exc:            # a page must still render without it
         log.warning("schedule unavailable: %s", exc)
         sched = None

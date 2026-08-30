@@ -99,17 +99,26 @@ def test_head_to_head_counts_from_the_home_perspective():
 def test_schedule_window_is_inclusive_and_bounded():
     _seed([g("2026-08-29", "A", "B", 1, 0), g("2026-09-02", "C", "D", 0, 0),
            g("2026-09-30", "A", "C", 2, 2)])
-    s = matchcard.schedule("tst", days=7, today="2026-08-30")
+    s = matchcard.schedule("tst", days=7, today="2026-08-30", back=0)
     dates = [d["date"] for d in s["days"]]
     assert "2026-09-02" in dates
     assert "2026-08-29" not in dates, "included a fixture before the start date"
     assert "2026-09-30" not in dates, "included a fixture beyond the window"
 
 
+def test_schedule_lookback_includes_recent_results():
+    """Recent results belong in the schedule, not a duplicate panel."""
+    _seed([g("2026-08-24", "A", "B", 2, 1), g("2026-09-02", "C", "D", 0, 0)])
+    s = matchcard.schedule("tst", days=7, today="2026-08-30", back=7)
+    dates = [d["date"] for d in s["days"]]
+    assert dates == ["2026-08-24", "2026-09-02"]
+    assert s["today"] == "2026-08-30"
+
+
 def test_card_reports_what_the_source_cannot_provide():
     """With no lineup provider configured, both gaps are named explicitly."""
     _seed([g("2026-08-29", "A", "B", 1, 0)])
-    s = matchcard.schedule("tst", days=7, today="2026-08-29")
+    s = matchcard.schedule("tst", days=7, today="2026-08-29", back=0)
     card = s["days"][0]["games"][0]
     assert set(card["unavailable"]) == {"lineups", "live"}
     assert card["result"]["summary"].startswith("A beat B 1")

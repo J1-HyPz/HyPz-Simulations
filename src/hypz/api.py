@@ -111,9 +111,10 @@ def api_fixtures():
 
 
 @app.get("/api/schedule")
-def api_schedule(days: int = Query(7, ge=1, le=30), start: str | None = None):
-    """Fixtures from today (or `start`) through `days` ahead, each with its card."""
-    return matchcard.schedule(SPORT, days=days, today=start)
+def api_schedule(days: int = Query(7, ge=1, le=30),
+                 back: int = Query(7, ge=0, le=30), start: str | None = None):
+    """Fixtures around today (or `start`): `back` days of results, `days` ahead."""
+    return matchcard.schedule(SPORT, days=days, today=start, back=back)
 
 
 @app.get("/api/match/{game_id:path}")

@@ -54,6 +54,17 @@ can be down without the other caring. The API never fits a model on request — 
 reloads ratings written by the scheduled `model.ratings` job — so a slow source
 can never make a page request hang.
 
+## The page
+
+Four sections behind a sticky nav — **Fixtures**, **Forecast**, **Ratings**,
+**Accuracy** — which is the order someone actually reads it in: what is on, try it
+yourself, who the model rates, and how well it has done. Model provenance sits in
+the footer rather than the header; `rho = -0.084` is not a headline.
+
+Ratings are drawn as diverging bars from a common zero rather than a table of
+decimals, so the spread between sides is the thing you read. Recent results and
+upcoming fixtures share one schedule instead of two panels repeating each other.
+
 ## The schedule
 
 ```bash
