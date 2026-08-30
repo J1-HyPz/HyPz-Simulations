@@ -1,0 +1,25 @@
+# Pinned to the set verified working on TrueNAS SCALE 25.04 (host Python 3.11).
+# Regenerate with: .venv/bin/pip freeze
+
+# --- Phase 1: Premier League vertical slice ---
+numpy==2.4.6
+pandas==3.0.5
+scipy==1.17.1
+requests==2.34.2
+SQLAlchemy==2.0.52
+
+# --- Phase 2: evaluation harness ---
+statsmodels==0.15.0
+
+# --- Phase 4: NFL ---
+# nfl_data_py is deliberately NOT used: it pins numpy 1.26 / pandas 1.5, which
+# cannot coexist with the stack above. nflverse publishes the same play-by-play
+# as parquet release assets, so we read those directly with pyarrow instead.
+pyarrow==25.0.1
+
+# --- Phase 5: serving ---
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+
+# --- Phase 3: scheduling ---
+APScheduler==3.11.3

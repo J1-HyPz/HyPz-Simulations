@@ -1,0 +1,17 @@
+services:
+  sim:
+    build: .
+    image: hypz-sim:latest
+    container_name: hypz-sim
+    # Match the host `claude` user so bind-mounted files stay owned correctly.
+    user: "3003:3001"
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ../data:/data
+    environment:
+      HYPZ_DB: /data/db/sim.db
+      HYPZ_RAW: /data/raw
+      PYTHONPATH: /app/src
+      TZ: Europe/London
+    restart: unless-stopped
