@@ -45,8 +45,13 @@ class PlanRestriction(ApiFootballError):
 
 
 class Client:
+    name = "api_football"
+
     def __init__(self, key: str | None = None, base: str = BASE):
-        self.key = key or os.environ.get(KEY_ENV) or ""
+        # `key=""` means "explicitly unconfigured"; only None falls back to the
+        # environment. Without this, a test cannot construct an unconfigured
+        # client on a host that happens to export a key.
+        self.key = (os.environ.get(KEY_ENV, "") if key is None else key) or ""
         self.base = base.rstrip("/")
         self.calls = 0
 
@@ -99,8 +104,15 @@ class Client:
             params["to"] = date_to
         return self._get("fixtures", **params)
 
+    def fixtures_for_dates(self, dates: list[str], season: int) -> list[dict]:
+        """This endpoint takes a range, so all dates cost a single request."""
+        ds = sorted(set(dates))
+        raw = self.fixtures(season, date_from=ds[0], date_to=ds[-1])
+        return [f for f in (parse_fixture(i) for i in raw) if f]
+
     def lineups(self, fixture_id: int) -> list[dict]:
-        return self._get("fixtures/lineups", fixture=fixture_id)
+        raw = self._get("fixtures/lineups", fixture=fixture_id)
+        return [ln for ln in (parse_lineup(i) for i in raw) if ln]
 
 
 def parse_fixture(item: dict) -> dict | None:

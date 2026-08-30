@@ -75,35 +75,42 @@ Fixtures from today onward. Each carries, drawn entirely from data already held:
 
 ### Lineups
 
-Starting lineups come from API-Football, which is optional. Without a key the
-pipeline runs exactly as before and the page says lineups are unavailable and why.
+Optional. With no key the pipeline runs unchanged and the page says lineups are
+unavailable and why.
 
 ```bash
-cp .env.example .env      # then paste your key into it
+cp .env.example .env      # paste a key into it
 docker compose up -d
 docker exec hypz-sim python -m hypz.cli lineups --sync
 ```
 
-> **The free plan cannot serve the current season.** It covers 2022–2024 only;
-> asking for a current fixture returns
-> `Free plans do not have access to this season, try from 2022 to 2024.`
-> The integration is verified working against a covered season — fixtures, team
-> name resolution and lineup parsing all confirmed against live responses — but
-> lineups for upcoming matches need a paid tier. Rejected calls do not count
-> against the quota.
+Two providers are supported behind one contract, and selection is automatic:
 
-When the plan does cover the season, this uses about eleven requests per matchweek:
-one to map fixture ids, then one per fixture, never repeated once a lineup is
-stored. `hypz lineups --quota` reports what is left.
+| Provider | Free tier | Verdict |
+|---|---|---|
+| **Highlightly** (default) | 100 req/day, all leagues, **current season** | recommended |
+| API-Football | 100 req/day, **seasons 2022–2024 only** | cannot serve current fixtures |
 
-A plan limit is treated as a configuration fact rather than an outage: the run
-completes, the provider's own message is recorded in `app_state`, and the page
-says lineups are unavailable *and why*. It does not retry its way through the quota.
+API-Football gates seasons by plan; Highlightly gates only request volume, so its
+free tier reaches the current season. `HYPZ_LINEUP_PROVIDER` forces one if needed.
 
-The two sources name teams differently — "Manchester United" against "Man United" —
-so identifiers are resolved once by alias then fuzzy match, stored on the team row,
-and never recomputed. Anything unresolved goes to `unmatched_names` for review
-rather than being guessed at, and `hypz lineups` prints the queue.
+They disagree at the wire level — API-Football takes a date range and returns a
+flat XI, Highlightly takes one date at a time and nests the XI one row per
+formation line — so both are normalised behind `adapters/lineup_provider.py` and
+`hypz.lineups` never learns which is in use.
+
+Roughly thirteen requests per matchweek on Highlightly: one to resolve the league,
+one per match date, then one per fixture, never repeated once a lineup is stored.
+
+Before kickoff the endpoint answers with a well-formed placeholder — empty arrays
+and formation `"Unknown"` — rather than an error. That is treated as absent, not
+stored, and retried later; caching it would satisfy the "already have it" check
+forever and the real lineup would never arrive.
+
+Team names differ between sources ("Manchester United" against "Man United"), so
+they are resolved once by alias then fuzzy match and stored on the team row.
+Unresolved names go to `unmatched_names` for review rather than being guessed at.
+All 20 current Premier League names resolve with none queued.
 
 ### Still not there
 
@@ -139,7 +146,7 @@ which is stronger evidence than any backtest.
 docker exec hypz-sim python -m pytest /app/tests -q
 ```
 
-61 tests, about two seconds. They cover the analytic gradient against numerical
+77 tests, about two seconds. They cover the analytic gradient against numerical
 differencing, the `as_of` cutoff that the whole backtest depends on, ingest
 idempotency and watermark contiguity, the leakage audit predicate, and two
 regressions for bugs found in Phase 3 (a stale watermark format, and a BOM that

@@ -641,7 +641,8 @@ function gameDetail(g){
       <div class="kv"><span>Draw</span><span>${pct(g.forecast.draw)}</span></div>
       <div class="kv"><span>${esc(g.away)} win</span><span>${pct(g.forecast.away)}</span></div>
       ${g.referee ? `<div class="kv" style="margin-top:6px"><span>Referee</span><span>${esc(g.referee)}</span></div>` : ""}
-      <p class="summ" style="margin-top:10px">Recorded ${g.forecast.run_at.replace("T"," ").slice(0,16)} UTC, before kickoff.</p></div>`;
+      <p class="summ" style="margin-top:10px">Recorded ${g.forecast.run_at.replace("T"," ").slice(0,16)} UTC, before kickoff.${
+        g.lineups ? "" : " Lineups are published about 30 minutes before kick-off."}</p></div>`;
   }
   return `<div class="gd">${blocks}</div>`;
 }

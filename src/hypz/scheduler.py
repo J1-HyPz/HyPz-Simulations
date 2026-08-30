@@ -59,16 +59,11 @@ def job_lineups():
     not a dependency of the pipeline.
     """
     def _work():
-        client = af.Client()
+        client = lineups_mod.get_provider()
         if not client.configured:
-            log.info("API_FOOTBALL_KEY not set; skipping lineups")
+            log.info("no lineup provider configured; skipping lineups")
             return "skipped"
-        with connect() as conn:
-            unmapped = conn.execute(
-                "SELECT COUNT(*) c FROM games WHERE sport_id='pl' AND status='scheduled' "
-                "AND external_ids_json NOT LIKE ?", (f'%"{lineups_mod.SOURCE}"%',)
-            ).fetchone()["c"]
-        if unmapped:
+        if lineups_mod.unmapped_count("pl", client.name):
             lineups_mod.sync_fixture_ids(client)
         return lineups_mod.fetch_lineups(client)
     _run("ingest.lineups", _work)

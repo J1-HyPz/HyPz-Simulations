@@ -16,6 +16,9 @@ services:
       TZ: Europe/London
       HYPZ_WEB_OUT: /data/web/fixture-model.html
       API_FOOTBALL_KEY: ${API_FOOTBALL_KEY:-}
+      HIGHLIGHTLY_KEY: ${HIGHLIGHTLY_KEY:-}
+      HIGHLIGHTLY_LEAGUE_ID: ${HIGHLIGHTLY_LEAGUE_ID:-}
+      HYPZ_LINEUP_PROVIDER: ${HYPZ_LINEUP_PROVIDER:-auto}
       HYPZ_RUN_ON_START: "1"
     # The scheduler is the container's main process; CLI work still goes through
     # `docker exec`. If it exits, restart brings it back.
@@ -39,6 +42,9 @@ services:
       PYTHONPATH: /app/src
       TZ: Europe/London
       API_FOOTBALL_KEY: ${API_FOOTBALL_KEY:-}
+      HIGHLIGHTLY_KEY: ${HIGHLIGHTLY_KEY:-}
+      HIGHLIGHTLY_LEAGUE_ID: ${HIGHLIGHTLY_LEAGUE_ID:-}
+      HYPZ_LINEUP_PROVIDER: ${HYPZ_LINEUP_PROVIDER:-auto}
     command: ["uvicorn", "hypz.api:app", "--host", "0.0.0.0", "--port", "8000",
               "--proxy-headers", "--log-level", "info"]
     ports:

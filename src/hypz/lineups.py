@@ -16,14 +16,41 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from .adapters import api_football as af
+from .adapters import highlightly as hl
 from .db import IngestRun, connect, get_state, now_iso, set_state
 
 log = logging.getLogger(__name__)
 
-SOURCE = "api_football"
+PROVIDER_ENV = "HYPZ_LINEUP_PROVIDER"
 # Records that the configured plan cannot serve the current season, so the page
 # can say lineups are unavailable and why, instead of silently showing none.
 PLAN_STATE_KEY = "lineups.plan_restriction"
+
+
+def get_provider(name: str | None = None):
+    """Pick a lineup provider.
+
+    Default is "auto": prefer Highlightly, whose free tier covers the current
+    season, and fall back to API-Football, whose free tier does not. An
+    unconfigured provider is still returned so callers can print a clean message
+    rather than branch on None.
+    """
+    import os
+    name = (name or os.environ.get(PROVIDER_ENV) or "auto").lower()
+    if name == "highlightly":
+        return hl.Client()
+    if name in ("api_football", "api-football"):
+        return af.Client()
+    h = hl.Client()
+    if h.configured:
+        return h
+    a = af.Client()
+    return a if a.configured else h
+
+
+def provider_errors(provider) -> tuple:
+    """The exception types that mean "not configured" for this provider."""
+    return (af.NotConfigured, hl.NotConfigured)
 
 # Cases fuzzy matching gets wrong or would rank ambiguously.
 ALIASES = {
@@ -83,23 +110,23 @@ def resolve_team(raw: str, known: list[str]) -> tuple[str | None, str]:
     return None, "unmatched"
 
 
-def _record_unmatched(conn, sport_id: str, raw: str, context: str) -> None:
+def _record_unmatched(conn, sport_id: str, source: str, raw: str, context: str) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO unmatched_names (sport_id, source, raw_name, context, first_seen) "
-        "VALUES (?,?,?,?,?)", (sport_id, SOURCE, raw, context, now_iso()))
+        "VALUES (?,?,?,?,?)", (sport_id, source, raw, context, now_iso()))
 
 
-def sync_fixture_ids(client: af.Client | None = None, sport_id: str = "pl",
-                     season: int | None = None, games_sql_extra: str = "") -> int:
+def sync_fixture_ids(client=None, sport_id: str = "pl", season: int | None = None) -> int:
     """Learn API-Football's fixture id for each of our scheduled games.
 
     One request. Matching is on date plus both resolved team names, so a fixture
     that moved date simply fails to match rather than binding to the wrong game.
     """
-    client = client or af.Client()
+    client = client or get_provider()
     if not client.configured:
-        raise af.NotConfigured(f"{af.KEY_ENV} is not set")
+        raise af.NotConfigured("no lineup provider configured")
 
+    source = client.name
     with connect() as conn:
         with IngestRun(conn, job="ingest.lineups", sport_id=sport_id) as run:
             known = [r["name"] for r in conn.execute(
@@ -120,24 +147,24 @@ def sync_fixture_ids(client: af.Client | None = None, sport_id: str = "pl",
                 season = y if int(dates[0][5:7]) >= 7 else y - 1
 
             try:
-                raw = client.fixtures(season, date_from=dates[0], date_to=dates[-1])
+                fixtures = client.fixtures_for_dates(dates, season)
             except af.PlanRestriction as exc:
                 # Not a fault: the key works, the plan does not reach this season.
                 set_state(conn, PLAN_STATE_KEY, str(exc))
                 log.warning("lineups unavailable on this plan: %s", exc)
                 return 0
             set_state(conn, PLAN_STATE_KEY, None)
-            fixtures = [f for f in (af.parse_fixture(i) for i in raw) if f]
-            log.info("%d fixtures returned for season %s", len(fixtures), season)
+            log.info("%d fixtures returned for season %s via %s",
+                     len(fixtures), season, source)
 
             index = {}
             for f in fixtures:
                 h, how_h = resolve_team(f["home"], known)
                 a, how_a = resolve_team(f["away"], known)
                 if h is None:
-                    _record_unmatched(conn, sport_id, f["home"], "api-football fixture home")
+                    _record_unmatched(conn, sport_id, source, f["home"], "fixture home")
                 if a is None:
-                    _record_unmatched(conn, sport_id, f["away"], "api-football fixture away")
+                    _record_unmatched(conn, sport_id, source, f["away"], "fixture away")
                 if h and a:
                     index[(f["date"], h, a)] = f
                     if "fuzzy" in (how_h, how_a):
@@ -149,9 +176,9 @@ def sync_fixture_ids(client: af.Client | None = None, sport_id: str = "pl",
                 if not f:
                     continue
                 ext = json.loads(r["external_ids_json"] or "{}")
-                if ext.get(SOURCE) == f["fixture_id"]:
+                if ext.get(source) == f["fixture_id"]:
                     continue
-                ext[SOURCE] = f["fixture_id"]
+                ext[source] = f["fixture_id"]
                 conn.execute("UPDATE games SET external_ids_json=? WHERE game_id=?",
                              (json.dumps(ext), r["game_id"]))
                 run.rows += 1
@@ -159,13 +186,14 @@ def sync_fixture_ids(client: af.Client | None = None, sport_id: str = "pl",
             return run.rows
 
 
-def fetch_lineups(client: af.Client | None = None, sport_id: str = "pl",
+def fetch_lineups(client=None, sport_id: str = "pl",
                   lookahead_hours: int = LOOKAHEAD_HOURS, max_calls: int = 20,
                   now: datetime | None = None) -> int:
     """Fetch lineups for imminent fixtures we do not already have."""
-    client = client or af.Client()
+    client = client or get_provider()
     if not client.configured:
-        raise af.NotConfigured(f"{af.KEY_ENV} is not set")
+        raise af.NotConfigured("no lineup provider configured")
+    source = client.name
     now = now or datetime.now(timezone.utc)
     horizon = now + timedelta(hours=lookahead_hours)
 
@@ -181,7 +209,7 @@ def fetch_lineups(client: af.Client | None = None, sport_id: str = "pl",
                 "AND g.external_ids_json LIKE ? "
                 "AND NOT EXISTS (SELECT 1 FROM lineups l WHERE l.game_id=g.game_id) "
                 "ORDER BY g.date_utc, g.kickoff",
-                (sport_id, f'%"{SOURCE}"%')).fetchall()
+                (sport_id, f'%"{source}"%')).fetchall()
 
             due = []
             for r in candidates:
@@ -209,34 +237,37 @@ def fetch_lineups(client: af.Client | None = None, sport_id: str = "pl",
                 return 0
 
             for r in due[:max_calls]:
-                fixture_id = json.loads(r["external_ids_json"])[SOURCE]
+                fixture_id = json.loads(r["external_ids_json"])[source]
                 try:
                     payload = client.lineups(fixture_id)
                 except af.PlanRestriction as exc:
                     set_state(conn, PLAN_STATE_KEY, str(exc))
                     log.warning("lineups unavailable on this plan: %s", exc)
                     break
-                except af.ApiFootballError as exc:
+                except (af.ApiFootballError, hl.HighlightlyError) as exc:
                     log.warning("lineup fetch failed for %s: %s", r["game_id"], exc)
                     break            # quota or outage; stop rather than burn calls
-                if not payload:
+                # A provider may answer with a well-formed record whose XI is
+                # empty because the lineup is not out yet. Storing that would
+                # satisfy the "already have it" check forever, so it is treated
+                # as absent and retried on a later run.
+                usable = [ln for ln in payload if ln.get("start_xi")]
+                if not usable:
                     log.info("lineups not published yet for %s", r["game_id"])
                     continue
-                for raw in payload:
-                    ln = af.parse_lineup(raw)
-                    if ln is None:
-                        continue
+                payload = usable
+                for ln in payload:
                     team, _ = resolve_team(ln["team_name"], known)
                     if team is None or team not in ids:
-                        _record_unmatched(conn, sport_id, ln["team_name"], "api-football lineup")
+                        _record_unmatched(conn, sport_id, source, ln["team_name"], "lineup")
                         continue
                     conn.execute(
                         "INSERT OR REPLACE INTO lineups (game_id, team_id, formation, coach,"
                         " players_json, source, fetched_at) VALUES (?,?,?,?,?,?,?)",
-                        (r["game_id"], ids[team], ln["formation"], ln["coach"],
-                         json.dumps({"start_xi": ln["start_xi"],
-                                     "substitutes": ln["substitutes"]}),
-                         SOURCE, now_iso()))
+                        (r["game_id"], ids[team], ln.get("formation"), ln.get("coach"),
+                         json.dumps({"start_xi": ln.get("start_xi", []),
+                                     "substitutes": ln.get("substitutes", [])}),
+                         source, now_iso()))
                     run.rows += 1
             log.info("stored %d lineups (%d api calls)", run.rows, client.calls)
             return run.rows
@@ -263,3 +294,12 @@ def for_game(game_id: str) -> dict | None:
                      "source": r["source"], "fetched_at": r["fetched_at"],
                      **json.loads(r["players_json"])}
     return out or None
+
+
+def unmapped_count(sport_id: str = "pl", source: str | None = None) -> int:
+    """Scheduled games with no fixture id for the active provider."""
+    source = source or get_provider().name
+    with connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) c FROM games WHERE sport_id=? AND status='scheduled' "
+            "AND external_ids_json NOT LIKE ?", (sport_id, f'%"{source}"%')).fetchone()["c"]

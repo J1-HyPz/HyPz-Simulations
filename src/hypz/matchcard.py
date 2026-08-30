@@ -27,7 +27,7 @@ LIVE_LIMITATION = {
     "live": "the results feed publishes after full time, so there is no in-play state",
 }
 NO_LINEUP_SOURCE = {
-    "lineups": "no lineup provider configured; set API_FOOTBALL_KEY to enable",
+    "lineups": "no lineup provider configured; set HIGHLIGHTLY_KEY to enable",
 }
 
 
@@ -38,9 +38,8 @@ def limitations() -> dict:
     free plan covers only past seasons, and reporting nothing in that case would
     leave an unexplained blank.
     """
-    from .adapters import api_football as _af
     out = dict(LIVE_LIMITATION)
-    if not _af.Client().configured:
+    if not lineups_mod.get_provider().configured:
         out.update(NO_LINEUP_SOURCE)
     else:
         restriction = lineups_mod.plan_restriction()

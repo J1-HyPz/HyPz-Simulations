@@ -304,17 +304,24 @@ def cmd_match(args) -> None:
 
 
 def cmd_lineups(args) -> None:
-    client = af.Client()
+    from .adapters import highlightly as hl
+    client = lineups_mod.get_provider(args.provider)
     if not client.configured:
         raise SystemExit(
-            f"{af.KEY_ENV} is not set.\n"
-            "  1. Create a free account at https://dashboard.api-football.com\n"
-            "  2. Put the key in .env next to docker-compose.yml:\n"
-            f"       {af.KEY_ENV}=your-key-here\n"
-            "  3. docker compose up -d")
+            "No lineup provider is configured.\n\n"
+            "  Recommended - Highlightly. Its free tier covers the current season.\n"
+            "    1. Free key at https://highlightly.net/football-api/\n"
+            "    2. Add to .env next to docker-compose.yml:\n"
+            f"         {hl.KEY_ENV}=your-key-here\n"
+            "    3. docker compose up -d\n\n"
+            "  Alternative - API-Football. Note its free tier only reaches\n"
+            "  seasons 2022-2024, so it cannot serve current fixtures.\n"
+            f"         {af.KEY_ENV}=your-key-here")
+    print(f"provider: {client.name}")
     if args.quota:
         q = client.quota()
-        print(f"plan {q['plan']}  used {q['used']} of {q['limit']} today")
+        limit = q["limit"] if q["limit"] is not None else "unknown"
+        print(f"plan {q['plan']}  used {q['used']} of {limit}")
         return
     mapped = lineups_mod.sync_fixture_ids(client) if args.sync else 0
     n = lineups_mod.fetch_lineups(client, lookahead_hours=args.hours)
@@ -393,6 +400,8 @@ def main() -> None:
     s.add_argument("--sync", action="store_true", help="refresh fixture id mapping first")
     s.add_argument("--hours", type=int, default=6, help="lookahead window")
     s.add_argument("--quota", action="store_true", help="report remaining daily allowance")
+    s.add_argument("--provider", choices=["highlightly", "api_football"],
+                   help="override provider selection")
 
     args = p.parse_args()
     _setup_logging(args.verbose)

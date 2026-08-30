@@ -42,6 +42,8 @@ def fresh_db(tmp_path, monkeypatch):
     # Isolate from the host: whether a real key happens to be exported must not
     # decide whether these pass.
     monkeypatch.delenv(af.KEY_ENV, raising=False)
+    monkeypatch.delenv("HIGHLIGHTLY_KEY", raising=False)
+    monkeypatch.delenv("HYPZ_LINEUP_PROVIDER", raising=False)
     db.init_db()
 
 

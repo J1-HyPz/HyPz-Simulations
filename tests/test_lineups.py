@@ -54,7 +54,7 @@ LINEUP_PAYLOAD = [
 
 
 class StubClient(af.Client):
-    """Same interface, canned answers, counts calls like the real one."""
+    """Canned answers over the real client, so the normalising parsers still run."""
 
     def __init__(self, fixtures=None, lineups_payload=None, key="test-key"):
         super().__init__(key=key)
@@ -67,13 +67,16 @@ class StubClient(af.Client):
 
     def lineups(self, fixture_id):
         self.calls += 1
-        return self._lineups
+        return [ln for ln in (af.parse_lineup(i) for i in self._lineups) if ln]
 
 
 @pytest.fixture(autouse=True)
 def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    # Isolate from the host: an exported key must not decide these outcomes.
     monkeypatch.delenv(af.KEY_ENV, raising=False)
+    monkeypatch.delenv("HIGHLIGHTLY_KEY", raising=False)
+    monkeypatch.delenv("HYPZ_LINEUP_PROVIDER", raising=False)
     db.init_db()
 
 
@@ -151,8 +154,8 @@ def test_sync_maps_fixture_ids():
     with db.connect() as conn:
         ext = json.loads(conn.execute(
             "SELECT external_ids_json FROM games").fetchone()["external_ids_json"])
-    assert ext[lineups.SOURCE] == 12345
-    assert c.calls == 1, "fixture sync must cost exactly one request"
+    assert ext["api_football"] == 12345
+    assert c.calls == 1, "this provider takes a date range, so one request covers all"
 
 
 def test_fetch_uses_kickoff_window_when_time_is_known():
@@ -248,6 +251,9 @@ class RestrictedClient(StubClient):
         self.calls += 1
         raise af.PlanRestriction(self.MESSAGE)
 
+    def fixtures_for_dates(self, dates, season):
+        return af.Client.fixtures_for_dates(self, dates, season)
+
 
 def test_plan_restriction_is_parsed_from_a_200_response():
     """The API returns HTTP 200 with an `errors` payload, so this must not be
@@ -302,3 +308,24 @@ def test_restriction_clears_once_the_plan_covers_the_season():
     assert lineups.plan_restriction()
     lineups.sync_fixture_ids(StubClient(), "pl")          # a plan that works
     assert lineups.plan_restriction() is None
+
+
+def test_empty_lineup_is_never_cached():
+    """A placeholder with no starting XI must not satisfy the "already stored"
+    check, or the real lineup is never fetched once it is published."""
+    _seed_fixture()
+    placeholder = [{"team": {"id": 33, "name": "Manchester United"},
+                    "formation": None, "startXI": [], "substitutes": []},
+                   {"team": {"id": 40, "name": "Nottingham Forest"},
+                    "formation": None, "startXI": [], "substitutes": []}]
+    c = StubClient(lineups_payload=placeholder)
+    lineups.sync_fixture_ids(c, "pl")
+    now = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
+    assert lineups.fetch_lineups(c, "pl", now=now) == 0
+
+    with db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) c FROM lineups").fetchone()["c"] == 0
+
+    # Once published, the same fixture is still eligible.
+    real = StubClient()
+    assert lineups.fetch_lineups(real, "pl", now=now) == 2
