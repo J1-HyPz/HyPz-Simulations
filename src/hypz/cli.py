@@ -11,6 +11,7 @@ import pandas as pd
 from .adapters.football_data import FootballDataAdapter
 from .db import connect, init_db, now_iso
 from .ingest import ingest_results, load_matches
+from . import backtest as bt
 from .export_web import export as export_web
 from .models import dixon_coles
 
@@ -144,6 +145,44 @@ def cmd_export_web(args) -> None:
     print(f"wrote {out} ({out.stat().st_size:,} bytes)")
 
 
+def cmd_backtest(args) -> None:
+    df = bt.walk_forward(args.sport, start=args.start, refit_days=args.refit_days,
+                         half_life=args.half_life)
+    if df.empty:
+        raise SystemExit("no predictions produced")
+    res = bt.evaluate(df)
+    cal = bt.calibration(df)
+    ece = bt.expected_calibration_error(cal)
+
+    span = f"{df['date'].min().date()}..{df['date'].max().date()}"
+    print(f"\nwalk-forward  {span}  refit every {args.refit_days}d  "
+          f"{len(df)} predictions\n")
+    print(f"{'':<24}{'n':>7}{'Brier':>9}{'log loss':>11}{'accuracy':>11}")
+    print("-" * 62)
+    order = ["model", "market", "model_on_market_subset", "base_rate",
+             "stronger_team", "home_always"]
+    for k in order:
+        if k not in res:
+            continue
+        r = res[k]
+        b = f"{r['brier']:.4f}" if r.get("brier") is not None else "-"
+        l = f"{r['log_loss']:.4f}" if r.get("log_loss") is not None else "-"
+        print(f"{k:<24}{r['n']:>7}{b:>9}{l:>11}{r['accuracy']:>10.1%}")
+
+    print(f"\ncalibration (all three outcomes pooled, ECE={ece:.4f})")
+    print(f"{'bin':<12}{'n':>7}{'predicted':>11}{'observed':>10}{'gap':>9}")
+    print("-" * 49)
+    for r in cal.itertuples(index=False):
+        print(f"{r.bin:<12}{r.n:>7}{r.predicted:>11.3f}{r.observed:>10.3f}{r.gap:>+9.3f}")
+
+    if args.save:
+        bt.persist(args.sport, res, cal, span, bt.per_season(df))
+        print("\nwritten to model_evaluations")
+    if args.out:
+        df.to_csv(args.out, index=False)
+        print(f"predictions written to {args.out}")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="hypz", description="HyPz sports simulator")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -174,6 +213,14 @@ def main() -> None:
     s.add_argument("--sport", default="pl", choices=ADAPTERS)
     s.add_argument("--season", default="2026/27")
     s.add_argument("--out", default="/data/web/fixture-model.html")
+
+    s = sub.add_parser("backtest"); s.set_defaults(func=cmd_backtest)
+    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--start", default="2012-08-01")
+    s.add_argument("--refit-days", type=int, default=7)
+    s.add_argument("--half-life", type=float, default=270.0)
+    s.add_argument("--save", action="store_true")
+    s.add_argument("--out", help="write per-match predictions to CSV")
 
     args = p.parse_args()
     _setup_logging(args.verbose)

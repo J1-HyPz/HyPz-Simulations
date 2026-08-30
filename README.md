@@ -4,8 +4,8 @@ Probabilistic forecasts for football and NFL fixtures. The output is always a
 distribution — *"Arsenal win 45.6% of the time, likeliest score 1–1"* — never a
 single predicted scoreline.
 
-**Status:** Phase 1 complete. Premier League ingestion and a fitted Dixon–Coles
-model produce match forecasts end to end. Not yet evaluated — see Phase 2.
+**Status:** Phases 1–2 complete. Premier League forecasts are produced end to end
+and validated by walk-forward backtest against the market closing line.
 
 ## Scope
 
@@ -84,16 +84,49 @@ src/hypz/
 
 Adding a sport means writing an adapter, not touching the engine.
 
+## Validation
+
+```bash
+docker exec hypz-sim python -m hypz.cli backtest --start 2012-08-01 --refit-days 7 --save
+```
+
+Walk-forward across 5,330 matches, 2012/13 to date, refitting weekly. Every forecast
+uses only matches played strictly *before* its own date — enforced in two independent
+places, because leakage is the failure mode that makes a worthless model look brilliant.
+
+| Forecaster | n | Brier | Log loss | Accuracy |
+|---|---|---|---|---|
+| Market closing line | 5,150 | **0.5633** | **0.9523** | 55.2% |
+| This model | 5,330 | 0.5777 | 0.9730 | 53.7% |
+| This model, market fixtures only | 5,150 | 0.5755 | 0.9700 | 54.1% |
+| Base rate | 5,330 | 0.6467 | 1.0694 | 44.6% |
+| Home team wins | 5,330 | — | — | 44.6% |
+
+Both shipping bars from the design doc are cleared: the model beats the base rate on
+every proper scoring rule, and beats "the home team wins" by nine accuracy points. It
+does not beat the closing line, and was never expected to — the gap is stable at
+0.01–0.02 Brier in 13 of 14 seasons. A model that suddenly beat the market would be
+better evidence of a leak than of an edge.
+
+Calibration is the number that matters for using the output: **ECE 0.0075**, with the
+0.0–0.6 range accurate to within 0.016.
+
+### Accuracy is close to useless here
+
+The model names a draw as the single likeliest result **24 times in 5,330**, though
+draws occur 23.8% of the time. A draw's probability tops out near 0.37 while a favoured
+side's exceeds it, so the argmax is 99.5% identical to "the stronger team wins". Judge
+this model on Brier, log loss and calibration.
+
 ## Roadmap
 
 | Phase | | Status |
 |---|---|---|
 | 1 | PL vertical slice | ✅ done |
-| 2 | Walk-forward backtest, calibration, baselines | next |
-| 3 | Scheduling, watermarks, health dashboard | |
+| 2 | Walk-forward backtest, calibration, baselines | ✅ done |
+| 3 | Scheduling, watermarks, health dashboard | next |
 | 4 | NFL (nflverse parquet, drive model) | |
 | 5 | Read API and web UI | partial — static page ships now |
 
-Phase 2 is the one that matters. Until a walk-forward backtest says otherwise,
-these forecasts are unvalidated — a model can look entirely reasonable and still
-be worse than "the home team wins".
+The model is calibrated and beats its baselines. What it is not is a market edge,
+and nothing in the roadmap is aimed at becoming one.

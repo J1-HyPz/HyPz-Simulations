@@ -47,7 +47,29 @@ def build_payload(sport_id: str = "pl", season: str = "2026/27") -> dict:
     finally:
         con.close()
 
+    # Latest walk-forward evaluation, if one has been run.
+    evaluation = None
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    try:
+        row = con.execute(
+            "SELECT * FROM model_evaluations WHERE sport_id=? ORDER BY eval_id DESC LIMIT 1",
+            (sport_id,)).fetchone()
+        if row:
+            evaluation = {
+                "window": row["window"], "n": row["n"],
+                "brier": row["brier"], "log_loss": row["log_loss"], "accuracy": row["accuracy"],
+                "calibration": json.loads(row["calibration_json"]),
+                "baselines": json.loads(row["baselines_json"]),
+                "seasons": json.loads(row["seasons_json"]) if row["seasons_json"] else [],
+            }
+    except sqlite3.OperationalError:
+        pass  # no evaluation table yet
+    finally:
+        con.close()
+
     return {
+        "evaluation": evaluation,
         "model_version": dixon_coles.MODEL_VERSION,
         "as_of": fit.as_of,
         "n_matches": fit.n_matches,

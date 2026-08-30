@@ -26,7 +26,7 @@ from ..config import HALF_LIFE_DAYS, MAX_GOALS
 
 log = logging.getLogger(__name__)
 
-MODEL_VERSION = "dixon-coles-1.1"
+MODEL_VERSION = "dixon-coles-1.2"
 
 # Precision of the Gaussian prior shrinking ratings toward the league mean.
 # Roughly "this many decayed matches of evidence before a team moves freely".
@@ -36,8 +36,8 @@ REG_STRENGTH = 5.0
 _TAU_FLOOR = 1e-10
 
 
-def _tau(x: np.ndarray, y: np.ndarray, lam: np.ndarray, mu: np.ndarray, rho: float) -> np.ndarray:
-    """Dixon-Coles low-score dependence correction."""
+def _tau_raw(x: np.ndarray, y: np.ndarray, lam: np.ndarray, mu: np.ndarray, rho: float) -> np.ndarray:
+    """Dixon-Coles low-score dependence correction, unclamped."""
     t = np.ones_like(lam, dtype=float)
     m = (x == 0) & (y == 0)
     t[m] = 1.0 - lam[m] * mu[m] * rho
@@ -47,7 +47,11 @@ def _tau(x: np.ndarray, y: np.ndarray, lam: np.ndarray, mu: np.ndarray, rho: flo
     t[m] = 1.0 + mu[m] * rho
     m = (x == 1) & (y == 1)
     t[m] = 1.0 - rho
-    return np.maximum(t, _TAU_FLOOR)
+    return t
+
+
+def _tau(x, y, lam, mu, rho):
+    return np.maximum(_tau_raw(x, y, lam, mu, rho), _TAU_FLOOR)
 
 
 @dataclass
@@ -61,6 +65,7 @@ class DixonColesFit:
     n_matches: int
     log_likelihood: float
     eff_weight: np.ndarray  # time-decayed matches behind each team's rating
+    raw_params: np.ndarray | None = None  # optimiser vector, for warm-starting the next refit
 
     def active_teams(self, min_weight: float = 5.0) -> list[str]:
         """Teams with enough recent evidence for their rating to mean anything."""
@@ -104,7 +109,8 @@ class DixonColesFit:
 
 
 def fit(matches: pd.DataFrame, as_of: pd.Timestamp | None = None,
-        half_life_days: float = HALF_LIFE_DAYS, reg: float = REG_STRENGTH) -> DixonColesFit:
+        half_life_days: float = HALF_LIFE_DAYS, reg: float = REG_STRENGTH,
+        x0: np.ndarray | None = None, teams: list[str] | None = None) -> DixonColesFit:
     """Fit by weighted maximum likelihood.
 
     `matches` needs columns: date, home, away, home_score, away_score.
@@ -119,7 +125,9 @@ def fit(matches: pd.DataFrame, as_of: pd.Timestamp | None = None,
     if df.empty:
         raise ValueError("no matches before as_of")
 
-    teams = sorted(set(df["home"]) | set(df["away"]))
+    # An explicit team list keeps the parameter vector stable across refits so a
+    # warm start stays valid; otherwise a promoted side shifts every index.
+    teams = teams if teams is not None else sorted(set(df["home"]) | set(df["away"]))
     n = len(teams)
     index = {t: i for i, t in enumerate(teams)}
 
@@ -147,12 +155,26 @@ def fit(matches: pd.DataFrame, as_of: pd.Timestamp | None = None,
         defence = p[n - 1 : 2 * n - 1]
         return attack, defence, p[-2], p[-1]
 
-    def neg_log_lik(p: np.ndarray) -> float:
+    def neg_log_lik(p: np.ndarray):
+        """Objective and analytic gradient.
+
+        The gradient matters for more than speed: the walk-forward backtest needs
+        hundreds of refits, and numerical differencing over ~2n+2 parameters costs
+        that many extra likelihood evaluations per step.
+        """
         attack, defence, home_adv, rho = unpack(p)
         lam = np.exp(attack[hi] + defence[ai] + home_adv)
         mu = np.exp(attack[ai] + defence[hi])
+
+        tau_raw = _tau_raw(hg, ag, lam, mu, rho)
+        # Where the floor binds, the objective is flat in tau's arguments, so the
+        # derivative through tau is genuinely zero. Without this mask the gradient
+        # divides by the floor and returns ~1e11 in a region the optimiser can
+        # legitimately probe during line search.
+        active = tau_raw > _TAU_FLOOR
+        tau = np.where(active, tau_raw, _TAU_FLOOR)
         ll = (
-            np.log(_tau(hg, ag, lam, mu, rho))
+            np.log(tau)
             + hg * np.log(lam) - lam - lg_hg
             + ag * np.log(mu) - mu - lg_ag
         )
@@ -161,12 +183,47 @@ def fit(matches: pd.DataFrame, as_of: pd.Timestamp | None = None,
         # relegated, so weight ~0 - are held at average instead of drifting to a
         # bound where the likelihood is flat and any value fits equally well.
         penalty = 0.5 * reg * (np.sum(attack ** 2) + np.sum(defence ** 2))
-        return -float(np.sum(w * ll)) + penalty
+        obj = -float(np.sum(w * ll)) + penalty
 
-    x0 = np.concatenate([np.zeros(n - 1), np.zeros(n), [0.25], [-0.05]])
+        # d(tau)/d(lam, mu, rho), nonzero only on the four corrected scorelines.
+        dt_dlam = np.zeros_like(lam)
+        dt_dmu = np.zeros_like(mu)
+        dt_drho = np.zeros_like(lam)
+        m = (hg == 0) & (ag == 0)
+        dt_dlam[m] = -mu[m] * rho; dt_dmu[m] = -lam[m] * rho; dt_drho[m] = -lam[m] * mu[m]
+        m = (hg == 0) & (ag == 1)
+        dt_dlam[m] = rho;          dt_drho[m] = lam[m]
+        m = (hg == 1) & (ag == 0)
+        dt_dmu[m] = rho;           dt_drho[m] = mu[m]
+        m = (hg == 1) & (ag == 1)
+        dt_drho[m] = -1.0
+        dt_dlam *= active
+        dt_dmu *= active
+        dt_drho *= active
+
+        # lam and mu are exponentials, so d(lam)/d(any additive term) = lam.
+        g_lam = w * ((hg - lam) + lam * dt_dlam / tau)
+        g_mu = w * ((ag - mu) + mu * dt_dmu / tau)
+        g_rho = float(np.sum(w * dt_drho / tau))
+
+        d_attack = np.bincount(hi, weights=g_lam, minlength=n) + np.bincount(ai, weights=g_mu, minlength=n)
+        d_defence = np.bincount(ai, weights=g_lam, minlength=n) + np.bincount(hi, weights=g_mu, minlength=n)
+        d_home = float(np.sum(g_lam))
+
+        # Negate for the minimiser, then add the penalty's own gradient.
+        d_attack = -d_attack + reg * attack
+        d_defence = -d_defence + reg * defence
+
+        # attack[n-1] is pinned to -sum(free), so it feeds back into every free slot.
+        grad_free_attack = d_attack[: n - 1] - d_attack[n - 1]
+        grad = np.concatenate([grad_free_attack, d_defence, [-d_home], [-g_rho]])
+        return obj, grad
+
+    if x0 is None:
+        x0 = np.concatenate([np.zeros(n - 1), np.zeros(n), [0.25], [-0.05]])
     bounds = [(-3, 3)] * (n - 1) + [(-3, 3)] * n + [(-1, 1), (-0.2, 0.2)]
 
-    res = minimize(neg_log_lik, x0, method="L-BFGS-B", bounds=bounds,
+    res = minimize(neg_log_lik, x0, method="L-BFGS-B", jac=True, bounds=bounds,
                    options={"maxiter": 500, "maxfun": 200_000})
     if not res.success:
         log.warning("optimiser did not converge cleanly: %s", res.message)
@@ -185,4 +242,5 @@ def fit(matches: pd.DataFrame, as_of: pd.Timestamp | None = None,
         n_matches=int(len(df)),
         log_likelihood=float(-res.fun),
         eff_weight=eff_weight,
+        raw_params=res.x.copy(),
     )
