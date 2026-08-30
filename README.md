@@ -28,6 +28,30 @@ docker exec hypz-sim python -m hypz.cli forecast --sport pl --match "Arsenal vs 
 `health` reports per-job pipeline state and exits non-zero when anything is stale
 or failing, so it works as a check in a monitor.
 
+## The app
+
+```bash
+docker compose up -d
+```
+
+Then open **http://<host>:8099** — the forecaster page, plus a read-only JSON API
+at `/api/docs`.
+
+| Endpoint | |
+|---|---|
+| `GET /` | the forecaster page |
+| `GET /api/forecast?home=X&away=Y` | any matchup: probabilities, expected goals, likeliest scorelines |
+| `GET /api/fixtures` | scheduled fixtures with their pre-kickoff forecast |
+| `GET /api/teams` | fitted ratings |
+| `GET /api/evaluation` | latest walk-forward result |
+| `GET /api/health` | pipeline state; 503 when stale or failing |
+
+Serving runs in its own container. That is design doc section 3's boundary made
+real: ingestion writes, serving reads, they share only the database, and either
+can be down without the other caring. The API never fits a model on request — it
+reloads ratings written by the scheduled `model.ratings` job — so a slow source
+can never make a page request hang.
+
 ## Running unattended
 
 The container's main process is an APScheduler daemon:
@@ -36,6 +60,7 @@ The container's main process is an APScheduler daemon:
 |---|---|
 | `ingest.results` | 04:00 daily |
 | `ingest.fixtures` | 08:00 and 20:00 |
+| `model.ratings` | 04:45 daily |
 | `model.forecast` | 05:00 daily |
 | `export.web` | 05:15 daily |
 
@@ -55,11 +80,13 @@ which is stronger evidence than any backtest.
 docker exec hypz-sim python -m pytest /app/tests -q
 ```
 
-22 tests, about a second. They cover the analytic gradient against numerical
+27 tests, about a second. They cover the analytic gradient against numerical
 differencing, the `as_of` cutoff that the whole backtest depends on, ingest
 idempotency and watermark contiguity, the leakage audit predicate, and two
 regressions for bugs found in Phase 3 (a stale watermark format, and a BOM that
-`latin-1` decoding turned into mojibake).
+`latin-1` decoding turned into mojibake), and static checks on the page template —
+every id the script touches must exist, and the outcome colour classes must be
+reachable from both places that use them.
 
 ## The forecaster page
 
@@ -163,7 +190,7 @@ this model on Brier, log loss and calibration.
 | 2 | Walk-forward backtest, calibration, baselines | ✅ done |
 | 3 | Scheduling, watermarks, health, fixtures, tests | ✅ done |
 | 4 | NFL (nflverse parquet, drive model) | next |
-| 5 | Read API, web UI, Postgres | partial — static page ships now |
+| 5 | Read API and web UI | ✅ done · Postgres still open |
 
 The model is calibrated and beats its baselines. What it is not is a market edge,
 and nothing in the roadmap is aimed at becoming one.

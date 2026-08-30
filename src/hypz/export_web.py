@@ -12,6 +12,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
+from . import ratings
 from .config import DB_PATH
 from .ingest import load_matches
 from .models import dixon_coles
@@ -22,11 +23,22 @@ TEMPLATE = Path(__file__).resolve().parents[2] / "web" / "template.html"
 PLACEHOLDER = "__MODEL_JSON__"
 
 
-def build_payload(sport_id: str = "pl", season: str = "2026/27") -> dict:
-    matches = load_matches(sport_id)
-    if matches.empty:
-        raise SystemExit("no matches - run ingest first")
-    fit = dixon_coles.fit(matches)
+def build_payload(sport_id: str = "pl", season: str = "2026/27",
+                  from_db: bool = False) -> dict:
+    """Assemble everything the page needs.
+
+    `from_db` reloads the last stored fit instead of refitting. The serving layer
+    uses it so that a page request never triggers a fit (design doc section 10).
+    """
+    if from_db:
+        fit = ratings.load(sport_id)
+        if fit is None:
+            raise RuntimeError("no stored ratings; run the model.ratings job first")
+    else:
+        matches = load_matches(sport_id)
+        if matches.empty:
+            raise SystemExit("no matches - run ingest first")
+        fit = dixon_coles.fit(matches)
 
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
@@ -44,6 +56,14 @@ def build_payload(sport_id: str = "pl", season: str = "2026/27") -> dict:
             "JOIN teams th ON th.team_id=g.home_team_id "
             "JOIN teams ta ON ta.team_id=g.away_team_id "
             "WHERE g.season=? ORDER BY g.date_utc", (season,))]
+    finally:
+        con.close()
+
+    con = sqlite3.connect(DB_PATH)
+    try:
+        n_seasons = con.execute(
+            "SELECT COUNT(DISTINCT season) FROM games WHERE sport_id=?", (sport_id,)
+        ).fetchone()[0]
     finally:
         con.close()
 
@@ -102,7 +122,7 @@ def build_payload(sport_id: str = "pl", season: str = "2026/27") -> dict:
         "home_adv": round(fit.home_adv, 6),
         "rho": round(fit.rho, 6),
         "half_life_days": 270,
-        "seasons": int(matches["season"].nunique()),
+        "seasons": n_seasons,
         "current_season": season,
         "current_teams": current,
         "played": played,

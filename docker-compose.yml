@@ -20,3 +20,25 @@ services:
     # `docker exec`. If it exits, restart brings it back.
     command: ["python", "-m", "hypz.scheduler"]
     restart: unless-stopped
+
+  # Serving is a separate process from ingestion on purpose (design doc section 3):
+  # they share only the database, and either can be down without the other caring.
+  api:
+    build: .
+    image: hypz-sim:latest
+    container_name: hypz-api
+    user: "3003:3001"
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ../data:/data
+    environment:
+      HYPZ_DB: /data/db/sim.db
+      HYPZ_RAW: /data/raw
+      PYTHONPATH: /app/src
+      TZ: Europe/London
+    command: ["uvicorn", "hypz.api:app", "--host", "0.0.0.0", "--port", "8000",
+              "--proxy-headers", "--log-level", "info"]
+    ports:
+      - "8099:8000"
+    restart: unless-stopped

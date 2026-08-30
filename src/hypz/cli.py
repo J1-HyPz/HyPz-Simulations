@@ -173,25 +173,8 @@ def cmd_fit(args) -> None:
         print(f"{fit.teams[i]:<18}{fit.attack[i]:>9.3f}{fit.defence[i]:>9.3f}"
               f"{strength[i]:>9.3f}{fit.eff_weight[i]:>8.1f}")
 
-    with connect() as conn:
-        for i, team in enumerate(fit.teams):
-            row = conn.execute(
-                "SELECT team_id FROM teams WHERE sport_id=? AND name=?", (args.sport, team)
-            ).fetchone()
-            if row is None:
-                continue
-            conn.execute(
-                "INSERT OR REPLACE INTO team_ratings (sport_id, team_id, as_of, model_version, rating_json) "
-                "VALUES (?,?,?,?,?)",
-                (args.sport, row["team_id"], fit.as_of, dixon_coles.MODEL_VERSION,
-                 json.dumps({"attack": float(fit.attack[i]), "defence": float(fit.defence[i])})),
-            )
-        conn.execute(
-            "INSERT OR REPLACE INTO team_ratings (sport_id, team_id, as_of, model_version, rating_json) "
-            "VALUES (?,?,?,?,?)",
-            (args.sport, 0, fit.as_of, dixon_coles.MODEL_VERSION + ":global",
-             json.dumps({"home_adv": fit.home_adv, "rho": fit.rho})),
-        )
+    from . import ratings as ratings_mod
+    ratings_mod.persist(fit, args.sport)
     print(f"\nratings written for {len(fit.teams)} teams")
 
 

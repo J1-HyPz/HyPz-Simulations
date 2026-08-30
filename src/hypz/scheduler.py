@@ -20,7 +20,9 @@ from apscheduler.triggers.cron import CronTrigger
 
 from .adapters.football_data import FootballDataAdapter
 from .export_web import export
-from .ingest import ingest_fixtures, ingest_results
+from .ingest import ingest_fixtures, ingest_results, load_matches
+from .models import dixon_coles
+from . import ratings
 from .predict import forecast_scheduled
 
 log = logging.getLogger(__name__)
@@ -47,6 +49,15 @@ def job_fixtures():
     _run("ingest.fixtures", ingest_fixtures, FootballDataAdapter())
 
 
+def job_ratings():
+    def _fit_and_store():
+        m = load_matches("pl")
+        if m.empty:
+            return 0
+        return ratings.persist(dixon_coles.fit(m), "pl")
+    _run("model.ratings", _fit_and_store)
+
+
 def job_forecast():
     _run("model.forecast", forecast_scheduled, "pl")
 
@@ -61,6 +72,7 @@ def build_scheduler() -> BlockingScheduler:
     # Results land overnight; everything downstream follows in order.
     sched.add_job(job_results, cron(hour=4, minute=0), id="ingest.results")
     sched.add_job(job_fixtures, cron(hour="8,20", minute=0), id="ingest.fixtures")
+    sched.add_job(job_ratings, cron(hour=4, minute=45), id="model.ratings")
     sched.add_job(job_forecast, cron(hour=5, minute=0), id="model.forecast")
     sched.add_job(job_export, cron(hour=5, minute=15), id="export.web")
     return sched
@@ -75,7 +87,7 @@ def main() -> None:
     if os.environ.get("HYPZ_RUN_ON_START", "1") == "1":
         # A fresh container should be useful immediately rather than at 04:00.
         log.info("priming: running every job once")
-        job_results(); job_fixtures(); job_forecast(); job_export()
+        job_results(); job_fixtures(); job_ratings(); job_forecast(); job_export()
 
     sched = build_scheduler()
     for j in sched.get_jobs():

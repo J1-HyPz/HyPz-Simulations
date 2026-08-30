@@ -105,7 +105,11 @@ select:focus-visible,button:focus-visible{outline:2px solid var(--accent); outli
 }
 .bar span:first-child{border-radius:5px 2px 2px 5px}
 .bar span:last-child{border-radius:2px 5px 5px 2px}
-.bar .bh{background:var(--home)} .bar .bd{background:var(--draw)} .bar .ba{background:var(--away)}
+/* Shared by the outcome bar and the fixture-list splits: scoping these to
+   .bar left the fixture splits with white text on no background. */
+.bar .bh, .up .split .bh{background:var(--home)}
+.bar .bd, .up .split .bd{background:var(--draw)}
+.bar .ba, .up .split .ba{background:var(--away)}
 
 .xg{display:grid; grid-template-columns:1fr 1fr; gap:2px}
 .xg div{background:var(--surface-2); border-radius:6px; padding:10px 12px}
@@ -469,14 +473,20 @@ document.getElementById("mx").addEventListener("mousemove", e => {
 document.getElementById("mx").addEventListener("mouseleave", () => tip.style.opacity = 0);
 
 // ---- static panels ----
-document.getElementById("m-n").textContent = M.n_matches.toLocaleString();
-document.getElementById("m-s").textContent = M.seasons;
-document.getElementById("m-d").textContent = M.as_of;
-document.getElementById("m-h").textContent = M.home_adv.toFixed(3);
-document.getElementById("m-r").textContent = M.rho.toFixed(3);
-document.getElementById("s-h").textContent = M.home_adv.toFixed(3);
-document.getElementById("s-r").textContent = "ρ = " + M.rho.toFixed(3);
-document.getElementById("f-v").textContent = M.model_version;
+// One stale id used to throw here and kill every later section, including the
+// whole render. Setting text is now non-fatal and says what it could not find.
+function setText(id, value){
+  const el = document.getElementById(id);
+  if (!el){ console.warn(`setText: no element #${id}`); return false; }
+  el.textContent = value;
+  return true;
+}
+setText("m-n", M.n_matches.toLocaleString());
+setText("m-s", M.seasons);
+setText("m-d", M.as_of);
+setText("m-h", M.home_adv.toFixed(3));
+setText("m-r", M.rho.toFixed(3));
+setText("f-v", M.model_version);
 
 const live = M.teams.filter(t => t.weight >= 5)
   .map(t => ({...t, net: t.attack - t.defence})).sort((a, b) => b.net - a.net);
@@ -500,7 +510,7 @@ document.getElementById("played").innerHTML =
     <td class="n" style="text-align:center">${g.hs}&ndash;${g.asc_}</td>
     <td style="font-weight:${g.asc_ > g.hs ? 600 : 400}">${g.a}</td></tr>`).join("");
 
-render();
+try { render(); } catch (e) { console.error('render failed', e); }
 
 // ---------- next fixtures, forecast before kickoff ----------
 if (M.upcoming && M.upcoming.length){
@@ -610,8 +620,8 @@ if (E){
 
   const ece = cal.reduce((a,c) => a + c.n*Math.abs(c.observed-c.predicted), 0) /
               cal.reduce((a,c) => a + c.n, 0);
-  document.getElementById("s-ece").textContent = ece.toFixed(4);
-  document.getElementById("s-draws").textContent = "24";
-  document.getElementById("s-n").textContent = E.n.toLocaleString();
+  setText("s-ece", ece.toFixed(4));
+  setText("s-draws", "24");
+  setText("s-n", E.n.toLocaleString());
 }
 </script>
