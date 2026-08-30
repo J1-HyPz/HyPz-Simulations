@@ -68,7 +68,33 @@ def build_payload(sport_id: str = "pl", season: str = "2026/27") -> dict:
     finally:
         con.close()
 
+    # Upcoming fixtures with the forecast that was recorded before kickoff.
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    try:
+        upcoming = [dict(r) for r in con.execute(
+            "SELECT g.date_utc d, th.name h, ta.name a, f.home_win_prob hp,"
+            "       f.draw_prob dp, f.away_win_prob ap, f.run_at "
+            "FROM games g JOIN forecasts f USING(game_id) "
+            "JOIN teams th ON th.team_id=g.home_team_id "
+            "JOIN teams ta ON ta.team_id=g.away_team_id "
+            "WHERE g.sport_id=? AND g.status='scheduled' "
+            "ORDER BY g.date_utc, th.name", (sport_id,))]
+    except sqlite3.OperationalError:
+        upcoming = []
+    finally:
+        con.close()
+
+    from .health import overall, summary
+    try:
+        jobs = summary()
+        health = {"state": overall(jobs), "jobs": jobs}
+    except sqlite3.OperationalError:
+        health = None
+
     return {
+        "upcoming": upcoming,
+        "health": health,
         "evaluation": evaluation,
         "model_version": dixon_coles.MODEL_VERSION,
         "as_of": fit.as_of,

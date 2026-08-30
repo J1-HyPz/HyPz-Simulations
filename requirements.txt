@@ -23,3 +23,6 @@ uvicorn[standard]==0.52.4
 
 # --- Phase 3: scheduling ---
 APScheduler==3.11.3
+
+# --- development ---
+pytest==8.4.2

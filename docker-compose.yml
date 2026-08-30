@@ -14,4 +14,9 @@ services:
       HYPZ_RAW: /data/raw
       PYTHONPATH: /app/src
       TZ: Europe/London
+      HYPZ_WEB_OUT: /data/web/fixture-model.html
+      HYPZ_RUN_ON_START: "1"
+    # The scheduler is the container's main process; CLI work still goes through
+    # `docker exec`. If it exits, restart brings it back.
+    command: ["python", "-m", "hypz.scheduler"]
     restart: unless-stopped

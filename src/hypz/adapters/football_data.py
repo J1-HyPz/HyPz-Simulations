@@ -17,14 +17,25 @@ from .base import GameRecord, SportAdapter, SportConfig
 
 log = logging.getLogger(__name__)
 
+def _strip_bom(raw: bytes) -> bytes:
+    """These files are UTF-8-with-BOM but carry stray non-UTF8 bytes in referee
+    names, so they are parsed as latin-1. That decodes the BOM to mojibake rather
+    than to \ufeff, which silently corrupts the first column name - so the BOM is
+    removed at the byte level, before any decoding decision."""
+    return raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
+
+
 BASE_URL = "https://www.football-data.co.uk/mmz4281/{code}/E0.csv"
+FIXTURES_URL = "https://www.football-data.co.uk/fixtures.csv"
+DIVISION = "E0"
 FIRST_SEASON_START = 1993
 
 CONFIG = SportConfig(
     sport_id="pl",
     name="English Premier League",
     simulation_unit="match_goals",
-    extra={"country": "England", "tier": 1, "teams_per_season": 20},
+    extra={"country": "England", "tier": 1, "teams_per_season": 20,
+           "matches_per_season": 380},
 )
 
 
@@ -52,6 +63,19 @@ class FootballDataAdapter(SportAdapter):
         self.raw_dir = RAW_DIR / "football-data" / "E0"
         self.raw_dir.mkdir(parents=True, exist_ok=True)
 
+    def current_season_year(self) -> int:
+        return current_season_start()
+
+    def seasons_after(self, start_year: int) -> list[str]:
+        """Seasons strictly after `start_year`, up to and including the current one.
+
+        The current season is always included even when it is also the watermark:
+        it keeps gaining matches, so it is never finished.
+        """
+        first = max(start_year + 1, FIRST_SEASON_START)
+        return [season_label(y) for y in range(min(first, current_season_start()),
+                                               current_season_start() + 1)]
+
     def available_seasons(self) -> list[str]:
         return [
             season_label(y)
@@ -74,7 +98,8 @@ class FootballDataAdapter(SportAdapter):
 
         # latin-1: these files carry the occasional non-UTF8 byte in referee names.
         df = pd.read_csv(
-            BytesIO(raw), encoding="latin-1", on_bad_lines="skip", low_memory=False
+            BytesIO(_strip_bom(raw)), encoding="latin-1", on_bad_lines="skip",
+            low_memory=False
         )
         required = {"Date", "HomeTeam", "AwayTeam", "FTHG", "FTAG"}
         missing = required - set(df.columns)
@@ -107,6 +132,40 @@ class FootballDataAdapter(SportAdapter):
                 )
             )
         return records
+
+    def fetch_fixtures(self) -> list[GameRecord]:
+        """Upcoming fixtures from the all-competitions feed, filtered to the Premier League.
+
+        Keys are built exactly as for results, so when a fixture is later played the
+        result upsert lands on the same row rather than creating a duplicate.
+        """
+        from io import BytesIO
+
+        resp = requests.get(FIXTURES_URL, timeout=self.timeout)
+        resp.raise_for_status()
+        (self.raw_dir / "fixtures.csv").write_bytes(resp.content)
+
+        df = pd.read_csv(BytesIO(_strip_bom(resp.content)), encoding="latin-1",
+                         on_bad_lines="skip", low_memory=False)
+        df = df[df["Div"] == DIVISION].dropna(subset=["HomeTeam", "AwayTeam", "Date"])
+        dates = pd.to_datetime(df["Date"], dayfirst=True, format="mixed", errors="coerce")
+        df = df.assign(match_date=dates).dropna(subset=["match_date"])
+
+        out: list[GameRecord] = []
+        for row in df.itertuples(index=False):
+            d = row.match_date.date()
+            extra = {}
+            if getattr(row, "Time", None) and pd.notna(row.Time):
+                extra["kickoff"] = str(row.Time)
+            out.append(GameRecord(
+                season=season_label(current_season_start(d)),
+                date_utc=d.isoformat(),
+                home_team=str(row.HomeTeam).strip(),
+                away_team=str(row.AwayTeam).strip(),
+                extra=extra,
+            ))
+        log.info("%d upcoming %s fixtures", len(out), DIVISION)
+        return out
 
     def fetch_results(self, seasons: list[str] | None = None) -> list[GameRecord]:
         wanted = (

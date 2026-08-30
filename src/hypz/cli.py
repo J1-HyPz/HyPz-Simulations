@@ -10,7 +10,9 @@ import pandas as pd
 
 from .adapters.football_data import FootballDataAdapter
 from .db import connect, init_db, now_iso
-from .ingest import ingest_results, load_matches
+from . import health as health_mod
+from .ingest import ingest_fixtures, ingest_results, load_matches
+from .predict import forecast_scheduled, scored_forecasts
 from . import backtest as bt
 from .export_web import export as export_web
 from .models import dixon_coles
@@ -34,8 +36,75 @@ def cmd_init(args) -> None:
 def cmd_ingest(args) -> None:
     adapter = ADAPTERS[args.sport]()
     seasons = args.seasons.split(",") if args.seasons else None
-    n = ingest_results(adapter, seasons)
+    n = ingest_results(adapter, seasons, force=args.force)
     print(f"ingested {n} records")
+
+
+def cmd_fixtures(args) -> None:
+    n = ingest_fixtures(ADAPTERS[args.sport]())
+    print(f"ingested {n} fixtures")
+
+
+def cmd_predict(args) -> None:
+    n = forecast_scheduled(args.sport)
+    print(f"wrote {n} forecasts")
+    if args.show:
+        with connect() as conn:
+            rows = conn.execute(
+                "SELECT g.date_utc d, th.name h, ta.name a, f.home_win_prob hp,"
+                " f.draw_prob dp, f.away_win_prob ap FROM forecasts f "
+                "JOIN games g USING(game_id) "
+                "JOIN teams th ON th.team_id=g.home_team_id "
+                "JOIN teams ta ON ta.team_id=g.away_team_id "
+                "WHERE g.status='scheduled' ORDER BY g.date_utc, th.name").fetchall()
+        if rows:
+            print(f"\n{'date':<12}{'fixture':<34}{'home':>8}{'draw':>8}{'away':>8}")
+            print("-" * 70)
+            for r in rows:
+                print(f"{r['d']:<12}{r['h'] + ' vs ' + r['a']:<34}"
+                      f"{r['hp']:>7.1%}{r['dp']:>8.1%}{r['ap']:>8.1%}")
+
+
+def cmd_health(args) -> None:
+    rows = health_mod.summary()
+    state = health_mod.overall(rows)
+    print(f"\npipeline: {state.upper()}\n")
+    if not rows:
+        print("  no runs recorded yet")
+        return
+    print(f"{'job':<18}{'state':<10}{'last run':<22}{'rows':>7}{'age(h)':>9}{'fails':>7}")
+    print("-" * 73)
+    for r in rows:
+        age = f"{r['age_hours']:.1f}" if r["age_hours"] is not None else "-"
+        print(f"{r['job']:<18}{r['state']:<10}{r['last_at'][:19]:<22}"
+              f"{r['last_rows']:>7}{age:>9}{r['total_failures']:>7}")
+        if r["last_error"]:
+            print(f"  └ {r['last_error'][:88]}")
+    raise SystemExit(0 if state == "ok" else 1)
+
+
+def cmd_track(args) -> None:
+    """Live track record: forecasts made before kickoff, scored after."""
+    import numpy as np
+    rows = scored_forecasts(args.sport)
+    if not rows:
+        print("no forecasts have been scored yet - none of the forecast fixtures "
+              "have been played since they were predicted")
+        return
+    print(f"\n{len(rows)} scored forecast(s)\n")
+    print(f"{'date':<12}{'fixture':<32}{'forecast H/D/A':<24}{'result':>8}{'brier':>8}")
+    print("-" * 84)
+    tot = 0.0
+    for r in rows:
+        act = ("H" if r["home_score"] > r["away_score"]
+               else "D" if r["home_score"] == r["away_score"] else "A")
+        p = np.array([r["home_win_prob"], r["draw_prob"], r["away_win_prob"]])
+        y = np.array([act == o for o in "HDA"], dtype=float)
+        b = float(((p - y) ** 2).sum()); tot += b
+        probs = f"{p[0]:.0%}/{p[1]:.0%}/{p[2]:.0%}"
+        print(f"{r['date_utc']:<12}{r['h'] + ' vs ' + r['a']:<32}{probs:<24}"
+              f"{str(r['home_score']) + '-' + str(r['away_score']):>8}{b:>8.3f}")
+    print(f"\nmean Brier: {tot/len(rows):.4f}   (backtest reference: 0.5777)")
 
 
 def cmd_status(args) -> None:
@@ -57,6 +126,25 @@ def cmd_status(args) -> None:
             ).fetchone()
             print(f"{sport['sport_id']:4} {sport['name']}")
             print(f"     games={g}  results={r}  teams={t}  span={span['a']} .. {span['b']}")
+        # Surface upstream gaps rather than letting them sit silently in the data.
+        # football-data.co.uk ships 2003/04 and 2004/05 with 335 of 380 matches.
+        expected = conn.execute(
+            "SELECT config_json FROM sports WHERE sport_id='pl'").fetchone()
+        import json as _json
+        exp = _json.loads(expected["config_json"]).get("matches_per_season") if expected else None
+        if exp:
+            short = conn.execute(
+                "SELECT season, COUNT(*) c FROM games WHERE status='final' "
+                "GROUP BY season HAVING c < ? ORDER BY season", (exp,)).fetchall()
+            cur = conn.execute(
+                "SELECT MAX(season) m FROM games").fetchone()["m"]
+            short = [r for r in short if r["season"] != cur]
+            if short:
+                print(f"\ndata gaps (source is short of {exp} matches):")
+                for r in short:
+                    print(f"  {r['season']}  {r['c']}/{exp}  "
+                          f"({exp - r['c']} missing upstream)")
+
         print("\nrecent ingest runs:")
         for run in conn.execute(
             "SELECT job, sport_id, started_at, status, rows, error FROM ingest_runs "
@@ -193,6 +281,19 @@ def main() -> None:
     s = sub.add_parser("ingest"); s.set_defaults(func=cmd_ingest)
     s.add_argument("--sport", default="pl", choices=ADAPTERS)
     s.add_argument("--seasons", help="comma-separated, e.g. 2024/25,2025/26")
+    s.add_argument("--force", action="store_true", help="ignore the watermark, refetch all")
+
+    s = sub.add_parser("fixtures"); s.set_defaults(func=cmd_fixtures)
+    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+
+    s = sub.add_parser("predict"); s.set_defaults(func=cmd_predict)
+    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--show", action="store_true")
+
+    sub.add_parser("health").set_defaults(func=cmd_health)
+
+    s = sub.add_parser("track"); s.set_defaults(func=cmd_track)
+    s.add_argument("--sport", default="pl", choices=ADAPTERS)
 
     sub.add_parser("status").set_defaults(func=cmd_status)
 

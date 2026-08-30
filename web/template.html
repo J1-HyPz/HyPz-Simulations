@@ -9,7 +9,7 @@
   --ink:#161E2B; --ink-2:#4A5668; --ink-3:#77839459;
   --muted:#6B7787; --line:#DEE2E8; --line-2:#C9D0DA;
   --home:#3168C9; --draw:#D9982B; --away:#B8436E;
-  --accent:#B0741A;
+  --accent:#B0741A; --ok:#2E7D57;
   --shadow:0 1px 2px #161E2B0F, 0 8px 24px #161E2B0A;
   --r:10px;
 }
@@ -19,7 +19,7 @@
     --ink:#E9EDF3; --ink-2:#A8B4C4; --ink-3:#6B788A66;
     --muted:#8592A4; --line:#232E3E; --line-2:#33415580;
     --home:#4A8AD8; --draw:#BC8A2E; --away:#CE6084;
-    --accent:#D8A63F;
+    --accent:#D8A63F; --ok:#4FA97C;
     --shadow:0 1px 2px #00000040, 0 8px 24px #00000033;
   }
 }
@@ -28,7 +28,7 @@
   --ink:#E9EDF3; --ink-2:#A8B4C4; --ink-3:#6B788A66;
   --muted:#8592A4; --line:#232E3E; --line-2:#33415580;
   --home:#4A8AD8; --draw:#BC8A2E; --away:#CE6084;
-  --accent:#D8A63F;
+  --accent:#D8A63F; --ok:#4FA97C;
   --shadow:0 1px 2px #00000040, 0 8px 24px #00000033;
 }
 
@@ -157,6 +157,23 @@ table.data td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabu
 .scorelist .track i{display:block; height:100%; border-radius:4px}
 .scorelist .pc{font-family:"IBM Plex Mono",monospace; font-size:12.5px; text-align:right; color:var(--ink-2)}
 
+.upnext{display:flex; flex-direction:column; gap:2px}
+.up{display:grid; grid-template-columns:62px minmax(0,1fr) 132px; gap:12px; align-items:center;
+  padding:9px 10px; border-radius:7px; background:var(--surface-2)}
+.up .d{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted)}
+.up .f{font-size:14px}
+.up .split{display:flex; height:20px; gap:2px}
+.up .split span{border-radius:3px; font-family:"IBM Plex Mono",monospace; font-size:9.5px;
+  color:#fff; display:grid; place-items:center; overflow:hidden}
+.hz{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px}
+.hz .j{display:flex; align-items:center; gap:7px; padding:7px 11px; border-radius:7px;
+  background:var(--surface-2); font-family:"IBM Plex Mono",monospace; font-size:11.5px}
+.hz .j i{width:8px; height:8px; border-radius:50%; display:inline-block}
+.hz .ok i{background:var(--ok)} .hz .stale i{background:var(--draw)} .hz .failing i{background:var(--away)}
+.hz .j em{font-style:normal; color:var(--muted)}
+.pill{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.09em;
+  text-transform:uppercase; padding:3px 9px; border-radius:20px; margin-left:9px}
+.p-ok{background:#2E7D5714; color:#2E7D57} .p-bad{background:#B8436E14; color:var(--away)}
 .score{width:100%; border-collapse:collapse; font-size:13.5px}
 .score th{text-align:right; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
   text-transform:uppercase; color:var(--muted); font-weight:500; padding:0 8px 8px; border-bottom:1px solid var(--line)}
@@ -246,6 +263,13 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; background:var(--su
     </div>
   </div>
 </div>
+
+<section class="card" style="margin-top:20px" id="upcoming-card" hidden>
+  <h2>Next fixtures<span class="pill p-ok" id="hz-state"></span></h2>
+  <p class="note" id="up-note"></p>
+  <div class="upnext" id="upnext"></div>
+  <div class="hz" id="hz"></div>
+</section>
 
 <div class="two">
   <section class="card">
@@ -477,6 +501,34 @@ document.getElementById("played").innerHTML =
     <td style="font-weight:${g.asc_ > g.hs ? 600 : 400}">${g.a}</td></tr>`).join("");
 
 render();
+
+// ---------- next fixtures, forecast before kickoff ----------
+if (M.upcoming && M.upcoming.length){
+  document.getElementById("upcoming-card").hidden = false;
+  const stamped = M.upcoming[0].run_at ? M.upcoming[0].run_at.replace("T", " ").slice(0, 16) : "";
+  document.getElementById("up-note").textContent =
+    `${M.upcoming.length} scheduled fixtures. These forecasts were recorded before kickoff` +
+    (stamped ? `, at ${stamped} UTC.` : ".");
+  document.getElementById("upnext").innerHTML = M.upcoming.map(u => {
+    const seg = (c, v) => `<span class="${c}" style="flex:0 0 ${(v*100).toFixed(1)}%">${
+      v > 0.18 ? (v*100).toFixed(0) : ""}</span>`;
+    return `<div class="up">
+      <span class="d">${u.d.slice(5)}</span>
+      <span class="f">${u.h} <em style="color:var(--muted);font-style:normal">v</em> ${u.a}</span>
+      <span class="split">${seg("bh",u.hp)}${seg("bd",u.dp)}${seg("ba",u.ap)}</span>
+    </div>`;
+  }).join("");
+}
+
+if (M.health){
+  const st = document.getElementById("hz-state");
+  st.textContent = "pipeline " + M.health.state;
+  st.className = "pill " + (M.health.state === "ok" ? "p-ok" : "p-bad");
+  document.getElementById("hz").innerHTML = M.health.jobs.map(j =>
+    `<span class="j ${j.state}"><i></i>${j.job}<em>${
+      j.age_hours === null ? "never" : j.age_hours < 1 ? "just now" : j.age_hours.toFixed(0)+"h ago"
+    }</em></span>`).join("");
+}
 
 // ---------- walk-forward validation ----------
 const E = M.evaluation;

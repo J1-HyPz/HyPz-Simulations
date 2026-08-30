@@ -4,8 +4,9 @@ Probabilistic forecasts for football and NFL fixtures. The output is always a
 distribution — *"Arsenal win 45.6% of the time, likeliest score 1–1"* — never a
 single predicted scoreline.
 
-**Status:** Phases 1–2 complete. Premier League forecasts are produced end to end
-and validated by walk-forward backtest against the market closing line.
+**Status:** Phases 1–3 complete. Premier League forecasts run unattended on a
+schedule, are recorded before kickoff, and are validated by walk-forward backtest
+against the market closing line.
 
 ## Scope
 
@@ -23,7 +24,42 @@ docker exec hypz-sim python -m hypz.cli fit --sport pl
 docker exec hypz-sim python -m hypz.cli forecast --sport pl --match "Arsenal vs Man City"
 ```
 
-`status` reports row counts and recent ingest runs.
+`status` reports row counts, upstream data gaps and recent ingest runs;
+`health` reports per-job pipeline state and exits non-zero when anything is stale
+or failing, so it works as a check in a monitor.
+
+## Running unattended
+
+The container's main process is an APScheduler daemon:
+
+| Job | Cadence |
+|---|---|
+| `ingest.results` | 04:00 daily |
+| `ingest.fixtures` | 08:00 and 20:00 |
+| `model.forecast` | 05:00 daily |
+| `export.web` | 05:15 daily |
+
+Every job is wrapped so an exception is logged and recorded in `ingest_runs`
+rather than killing the scheduler — a dead scheduler is silent, a failed run is
+visible. Results ingestion reads its watermark and fetches only seasons that are
+not yet finished, which takes the run from ~7.5s to ~1.2s.
+
+Forecasts for scheduled fixtures are written to `forecasts` before kickoff and
+fingerprinted with an `inputs_hash`, so a re-run with unchanged ratings writes
+nothing. `track` scores them once the matches are played — a prospective record,
+which is stronger evidence than any backtest.
+
+## Tests
+
+```bash
+docker exec hypz-sim python -m pytest /app/tests -q
+```
+
+22 tests, about a second. They cover the analytic gradient against numerical
+differencing, the `as_of` cutoff that the whole backtest depends on, ingest
+idempotency and watermark contiguity, the leakage audit predicate, and two
+regressions for bugs found in Phase 3 (a stale watermark format, and a BOM that
+`latin-1` decoding turned into mojibake).
 
 ## The forecaster page
 
@@ -125,9 +161,9 @@ this model on Brier, log loss and calibration.
 |---|---|---|
 | 1 | PL vertical slice | ✅ done |
 | 2 | Walk-forward backtest, calibration, baselines | ✅ done |
-| 3 | Scheduling, watermarks, health dashboard | next |
-| 4 | NFL (nflverse parquet, drive model) | |
-| 5 | Read API and web UI | partial — static page ships now |
+| 3 | Scheduling, watermarks, health, fixtures, tests | ✅ done |
+| 4 | NFL (nflverse parquet, drive model) | next |
+| 5 | Read API, web UI, Postgres | partial — static page ships now |
 
 The model is calibrated and beats its baselines. What it is not is a market edge,
 and nothing in the roadmap is aimed at becoming one.

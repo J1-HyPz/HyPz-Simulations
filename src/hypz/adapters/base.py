@@ -46,5 +46,9 @@ class SportAdapter(Protocol):
         """Return played fixtures. Must be safe to call repeatedly."""
         ...
 
+    def fetch_fixtures(self) -> list[GameRecord]:
+        """Return upcoming, unplayed fixtures. Scores are None."""
+        ...
+
     def available_seasons(self) -> list[str]:
         ...
