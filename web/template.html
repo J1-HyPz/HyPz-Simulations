@@ -1,0 +1,431 @@
+<title>HyPz Fixture Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#F5F6F8; --surface:#FFFFFF; --surface-2:#EFF1F4;
+  --ink:#161E2B; --ink-2:#4A5668; --ink-3:#77839459;
+  --muted:#6B7787; --line:#DEE2E8; --line-2:#C9D0DA;
+  --home:#3168C9; --draw:#D9982B; --away:#B8436E;
+  --accent:#B0741A;
+  --shadow:0 1px 2px #161E2B0F, 0 8px 24px #161E2B0A;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E141E; --surface:#131A26; --surface-2:#1A2331;
+    --ink:#E9EDF3; --ink-2:#A8B4C4; --ink-3:#6B788A66;
+    --muted:#8592A4; --line:#232E3E; --line-2:#33415580;
+    --home:#4A8AD8; --draw:#BC8A2E; --away:#CE6084;
+    --accent:#D8A63F;
+    --shadow:0 1px 2px #00000040, 0 8px 24px #00000033;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E141E; --surface:#131A26; --surface-2:#1A2331;
+  --ink:#E9EDF3; --ink-2:#A8B4C4; --ink-3:#6B788A66;
+  --muted:#8592A4; --line:#232E3E; --line-2:#33415580;
+  --home:#4A8AD8; --draw:#BC8A2E; --away:#CE6084;
+  --accent:#D8A63F;
+  --shadow:0 1px 2px #00000040, 0 8px 24px #00000033;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1120px; margin:0 auto; padding:32px 20px 72px}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif; text-wrap:balance; margin:0}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--muted);
+}
+
+/* ---------- header ---------- */
+header{display:flex; flex-wrap:wrap; gap:16px 24px; align-items:flex-end; justify-content:space-between; margin-bottom:8px}
+h1{font-size:clamp(28px,4vw,40px); font-weight:800; letter-spacing:-.02em; line-height:1.05}
+h1 .sub{display:block; font-size:14px; font-weight:500; letter-spacing:0; color:var(--muted); margin-top:8px; font-family:"IBM Plex Sans",sans-serif}
+.meta{display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--surface)}
+.meta div{padding:8px 14px; border-right:1px solid var(--line)}
+.meta div:last-child{border-right:0}
+.meta dt{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0}
+.meta dd{margin:2px 0 0; font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:500; font-variant-numeric:tabular-nums}
+
+/* ---------- controls ---------- */
+.picker{
+  display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:end;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:16px; margin:24px 0; box-shadow:var(--shadow);
+}
+.field{display:flex; flex-direction:column; gap:6px; min-width:0}
+label{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-family:"IBM Plex Mono",monospace}
+select{
+  font:inherit; font-size:16px; font-weight:500; color:var(--ink);
+  background:var(--surface-2); border:1px solid var(--line-2); border-radius:8px;
+  padding:10px 12px; width:100%; cursor:pointer; appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 18px) 51%, calc(100% - 13px) 51%;
+  background-size:5px 5px,5px 5px; background-repeat:no-repeat; padding-right:38px;
+}
+button{font:inherit; cursor:pointer; color:var(--ink)}
+#swap{
+  background:var(--surface-2); border:1px solid var(--line-2); border-radius:8px;
+  width:42px; height:42px; font-size:17px; line-height:1; display:grid; place-items:center;
+  transition:background .15s, transform .2s;
+}
+#swap:hover{background:var(--ground); transform:rotate(180deg)}
+select:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+/* ---------- hero ---------- */
+.hero{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); gap:20px; align-items:start}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:20px; box-shadow:var(--shadow)}
+.card h2{font-size:15px; font-weight:700; letter-spacing:-.01em; margin-bottom:2px}
+.card .note{font-size:12.5px; color:var(--muted); margin:0 0 16px}
+
+/* outcome numbers */
+.outcomes{display:grid; grid-template-columns:repeat(3,1fr); gap:2px; margin-bottom:14px}
+.oc{padding:12px 6px; text-align:center; border-radius:6px; background:var(--surface-2)}
+.oc .k{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:5px}
+.oc .k i{width:8px; height:8px; border-radius:2px; display:inline-block}
+.oc .v{font-family:"IBM Plex Mono",monospace; font-size:clamp(22px,3.4vw,30px); font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.02em; margin-top:4px}
+.oc.h .k i{background:var(--home)} .oc.d .k i{background:var(--draw)} .oc.a .k i{background:var(--away)}
+
+/* stacked probability bar: 2px surface gaps, direct labels */
+.bar{display:flex; height:34px; gap:2px; margin-bottom:16px}
+.bar span{
+  display:grid; place-items:center; font-family:"IBM Plex Mono",monospace;
+  font-size:12px; font-weight:600; color:#fff; overflow:hidden; min-width:0;
+  transition:flex-basis .35s cubic-bezier(.4,0,.2,1);
+}
+.bar span:first-child{border-radius:5px 2px 2px 5px}
+.bar span:last-child{border-radius:2px 5px 5px 2px}
+.bar .bh{background:var(--home)} .bar .bd{background:var(--draw)} .bar .ba{background:var(--away)}
+
+.xg{display:grid; grid-template-columns:1fr 1fr; gap:2px}
+.xg div{background:var(--surface-2); border-radius:6px; padding:10px 12px}
+.xg dt{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0}
+.xg dd{margin:2px 0 0; font-family:"IBM Plex Mono",monospace; font-size:20px; font-weight:600; font-variant-numeric:tabular-nums}
+
+/* ---------- score matrix ---------- */
+.gridwrap{overflow-x:auto}
+table.mx{border-collapse:separate; border-spacing:2px; margin:0 auto}
+table.mx th{font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:500; color:var(--muted); padding:0; width:30px; height:22px}
+table.mx th.corner{font-size:9.5px; letter-spacing:.06em}
+table.mx td{
+  width:30px; height:30px; border-radius:4px; padding:0; text-align:center; vertical-align:middle;
+  font-family:"IBM Plex Mono",monospace; font-size:9.5px; font-variant-numeric:tabular-nums;
+  cursor:default; position:relative; transition:transform .12s;
+}
+table.mx td:hover{transform:scale(1.18); z-index:3; box-shadow:0 0 0 2px var(--surface),0 2px 8px #0003}
+table.mx td.peak{box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--ink)}
+.axis{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:10px}
+.legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:14px; font-size:12px; color:var(--ink-2)}
+.legend span{display:flex; align-items:center; gap:6px}
+.legend i{width:10px; height:10px; border-radius:2px; display:inline-block}
+
+#tip{
+  position:fixed; pointer-events:none; opacity:0; transition:opacity .12s;
+  background:var(--ink); color:var(--ground); font-family:"IBM Plex Mono",monospace;
+  font-size:12px; padding:6px 9px; border-radius:6px; z-index:50; white-space:nowrap;
+}
+
+/* ---------- lower sections ---------- */
+section{margin-top:20px}
+.two{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px}
+table.data{width:100%; border-collapse:collapse; font-size:13.5px}
+table.data th{
+  text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); font-weight:500;
+  padding:0 8px 8px; border-bottom:1px solid var(--line);
+}
+table.data td{padding:7px 8px; border-bottom:1px solid var(--line)}
+table.data tr:last-child td{border-bottom:0}
+table.data td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; text-align:right}
+.rankbar{position:relative}
+.rankbar .fill{position:absolute; inset:0 auto 0 0; border-radius:2px; opacity:.16}
+.rankbar span{position:relative}
+.scorelist{display:flex; flex-direction:column; gap:2px}
+.scorelist .row{display:grid; grid-template-columns:56px 1fr 52px; gap:10px; align-items:center; padding:6px 8px; border-radius:6px; background:var(--surface-2)}
+.scorelist .sc{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:14px}
+.scorelist .track{height:7px; border-radius:4px; background:var(--line); overflow:hidden}
+.scorelist .track i{display:block; height:100%; border-radius:4px}
+.scorelist .pc{font-family:"IBM Plex Mono",monospace; font-size:12.5px; text-align:right; color:var(--ink-2)}
+
+.status{
+  margin-top:22px; border:1px solid var(--line); border-left:3px solid var(--accent);
+  border-radius:var(--r); padding:16px 18px; background:var(--surface);
+}
+.status h3{font-size:14px; font-weight:700; margin-bottom:6px}
+.status p{margin:0 0 8px; font-size:13.5px; color:var(--ink-2); max-width:68ch}
+.status p:last-child{margin-bottom:0}
+footer{margin-top:28px; font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 18px}
+code{font-family:"IBM Plex Mono",monospace; font-size:.92em; background:var(--surface-2); padding:1px 5px; border-radius:4px}
+
+@media (max-width:860px){
+  .hero,.two{grid-template-columns:1fr}
+  .picker{grid-template-columns:1fr auto 1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>HyPz Fixture Model
+    <span class="sub">Dixon–Coles bivariate Poisson · Premier League</span>
+  </h1>
+  <dl class="meta">
+    <div><dt>Matches</dt><dd id="m-n"></dd></div>
+    <div><dt>Seasons</dt><dd id="m-s"></dd></div>
+    <div><dt>Fitted to</dt><dd id="m-d"></dd></div>
+    <div><dt>Home adv</dt><dd id="m-h"></dd></div>
+    <div><dt>ρ</dt><dd id="m-r"></dd></div>
+  </dl>
+</header>
+
+<div class="picker">
+  <div class="field">
+    <label for="home">Home team</label>
+    <select id="home"></select>
+  </div>
+  <button id="swap" title="Swap home and away" aria-label="Swap home and away">⇄</button>
+  <div class="field">
+    <label for="away">Away team</label>
+    <select id="away"></select>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="card">
+    <h2 id="fixture-title">Result probability</h2>
+    <p class="note">Every figure is a share of the modelled distribution, not a prediction.</p>
+    <div class="outcomes">
+      <div class="oc h"><div class="k"><i></i>Home</div><div class="v" id="p-h"></div></div>
+      <div class="oc d"><div class="k"><i></i>Draw</div><div class="v" id="p-d"></div></div>
+      <div class="oc a"><div class="k"><i></i>Away</div><div class="v" id="p-a"></div></div>
+    </div>
+    <div class="bar" id="bar" role="img" aria-label="Outcome probability split"></div>
+    <dl class="xg">
+      <div><dt id="xg-hl">Home expected goals</dt><dd id="xg-h"></dd></div>
+      <div><dt id="xg-al">Away expected goals</dt><dd id="xg-a"></dd></div>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>Scoreline distribution</h2>
+    <p class="note">Hue marks the outcome, depth the probability. The draw diagonal is geometry, not decoration.</p>
+    <div class="gridwrap"><table class="mx" id="mx"></table></div>
+    <div class="legend">
+      <span><i style="background:var(--home)"></i>Home win</span>
+      <span><i style="background:var(--draw)"></i>Draw</span>
+      <span><i style="background:var(--away)"></i>Away win</span>
+      <span style="color:var(--muted)">Ringed cell = likeliest score</span>
+    </div>
+  </div>
+</div>
+
+<div class="two">
+  <section class="card">
+    <h2>Likeliest scorelines</h2>
+    <p class="note">Top six of the 121-cell grid.</p>
+    <div class="scorelist" id="top"></div>
+  </section>
+
+  <section class="card">
+    <h2>2026/27 so far</h2>
+    <p class="note">Results already played this season.</p>
+    <div style="overflow-x:auto"><table class="data" id="played"></table></div>
+  </section>
+</div>
+
+<section class="card" style="margin-top:20px">
+  <h2>Fitted team ratings</h2>
+  <p class="note">Attack and defence in log-goal units. Weight is decayed matches of evidence behind each rating — promoted sides carry less. Lower defence is better.</p>
+  <div style="overflow-x:auto"><table class="data" id="ratings"></table></div>
+</section>
+
+<div class="status">
+  <h3>These forecasts are not yet validated</h3>
+  <p>The parameters are sound — home advantage of <span class="mono" id="s-h"></span> and <span class="mono" id="s-r"></span> both sit where the literature puts them — and the model independently rated Wolves, Burnley and West Ham as the weakest sides in 2025/26, which are exactly the three relegated. That is encouraging, not evidence.</p>
+  <p>Nothing here has been tested against held-out data. A model can look entirely reasonable and still be beaten by “the home team wins”. Phase 2 is the walk-forward backtest — Brier score, log loss, a calibration curve, and comparison against three baselines including the market closing line, which football-data.co.uk ships in the same files. Until those numbers exist, treat this as a working slice rather than a forecast you would act on.</p>
+</div>
+
+<footer>
+  <span class="mono" id="f-v"></span>
+  <span>Data: football-data.co.uk</span>
+  <span>Dixon &amp; Coles (1997)</span>
+  <span>270-day half-life</span>
+</footer>
+</div>
+
+<div id="tip" role="status"></div>
+
+<script>
+const M = __MODEL_JSON__;
+const T = Object.fromEntries(M.teams.map(t => [t.name, t]));
+const MAXG = 10;
+const F = [1,1,2,6,24,120,720,5040,40320,362880,3628800];
+
+const fmt = p => (p*100).toFixed(1) + "%";
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function rates(h, a){
+  const H = T[h], A = T[a];
+  return [Math.exp(H.attack + A.defence + M.home_adv), Math.exp(A.attack + H.defence)];
+}
+
+function matrix(h, a){
+  const [lam, mu] = rates(h, a);
+  const pois = (k, l) => Math.exp(-l) * Math.pow(l, k) / F[k];
+  const m = [];
+  for (let i = 0; i <= MAXG; i++){
+    m[i] = [];
+    for (let j = 0; j <= MAXG; j++) m[i][j] = pois(i, lam) * pois(j, mu);
+  }
+  // Dixon-Coles low-score dependence correction
+  m[0][0] *= 1 - lam*mu*M.rho;
+  m[0][1] *= 1 + lam*M.rho;
+  m[1][0] *= 1 + mu*M.rho;
+  m[1][1] *= 1 - M.rho;
+  let s = 0;
+  for (let i = 0; i <= MAXG; i++) for (let j = 0; j <= MAXG; j++){ m[i][j] = Math.max(m[i][j], 0); s += m[i][j]; }
+  for (let i = 0; i <= MAXG; i++) for (let j = 0; j <= MAXG; j++) m[i][j] /= s;
+  return {m, lam, mu};
+}
+
+function render(){
+  const h = homeSel.value, a = awaySel.value;
+  const {m, lam, mu} = matrix(h, a);
+
+  let ph = 0, pd = 0, pa = 0, peak = {p: -1};
+  const flat = [];
+  for (let i = 0; i <= MAXG; i++) for (let j = 0; j <= MAXG; j++){
+    const p = m[i][j];
+    if (i > j) ph += p; else if (i === j) pd += p; else pa += p;
+    if (p > peak.p) peak = {p, i, j};
+    flat.push({i, j, p});
+  }
+
+  document.getElementById("fixture-title").textContent = h + " vs " + a;
+  document.getElementById("p-h").textContent = fmt(ph);
+  document.getElementById("p-d").textContent = fmt(pd);
+  document.getElementById("p-a").textContent = fmt(pa);
+  document.getElementById("xg-hl").textContent = h + " expected goals";
+  document.getElementById("xg-al").textContent = a + " expected goals";
+  document.getElementById("xg-h").textContent = lam.toFixed(2);
+  document.getElementById("xg-a").textContent = mu.toFixed(2);
+
+  // Direct labels on every segment satisfy the contrast relief the palette needs.
+  document.getElementById("bar").innerHTML =
+    [["bh", ph], ["bd", pd], ["ba", pa]].map(([c, p]) =>
+      `<span class="${c}" style="flex:0 0 ${(p*100).toFixed(2)}%">${p > 0.07 ? fmt(p) : ""}</span>`).join("");
+
+  // Composite encoding: hue = outcome, alpha = probability against the cell's own max.
+  const hi = peak.p;
+  let html = "<tr><th class='corner'>H \\ A</th>";
+  for (let j = 0; j <= MAXG; j++) html += `<th>${j}</th>`;
+  html += "</tr>";
+  for (let i = 0; i <= MAXG; i++){
+    html += `<tr><th>${i}</th>`;
+    for (let j = 0; j <= MAXG; j++){
+      const p = m[i][j];
+      const hue = i > j ? "--home" : i === j ? "--draw" : "--away";
+      const alpha = Math.pow(p / hi, 0.55);
+      const label = p >= 0.02 ? (p*100).toFixed(0) : "";
+      const ink = alpha > 0.62 ? "#fff" : "var(--ink-2)";
+      html += `<td data-i="${i}" data-j="${j}" data-p="${p}"
+        style="background:color-mix(in srgb, var(${hue}) ${(alpha*100).toFixed(1)}%, var(--surface-2));color:${ink}"
+        class="${i === peak.i && j === peak.j ? "peak" : ""}">${label}</td>`;
+    }
+    html += "</tr>";
+  }
+  document.getElementById("mx").innerHTML = html;
+
+  flat.sort((x, y) => y.p - x.p);
+  document.getElementById("top").innerHTML = flat.slice(0, 6).map(c => {
+    const hue = c.i > c.j ? "--home" : c.i === c.j ? "--draw" : "--away";
+    return `<div class="row">
+      <span class="sc">${c.i}&ndash;${c.j}</span>
+      <span class="track"><i style="width:${(c.p/flat[0].p*100).toFixed(1)}%;background:var(${hue})"></i></span>
+      <span class="pc">${fmt(c.p)}</span></div>`;
+  }).join("");
+}
+
+// ---- team pickers ----
+const homeSel = document.getElementById("home"), awaySel = document.getElementById("away");
+const current = M.current_teams;
+const others = M.teams.filter(t => t.weight >= 5 && !current.includes(t.name))
+                      .map(t => t.name).sort();
+const opts =
+  `<optgroup label="${M.current_season}">` + current.map(t => `<option>${t}</option>`).join("") + "</optgroup>" +
+  (others.length ? `<optgroup label="Recently relegated">` + others.map(t => `<option>${t}</option>`).join("") + "</optgroup>" : "");
+homeSel.innerHTML = opts; awaySel.innerHTML = opts;
+homeSel.value = "Arsenal"; awaySel.value = "Man City";
+
+function guard(changed){
+  if (homeSel.value === awaySel.value){
+    const pool = current.filter(t => t !== homeSel.value);
+    (changed === homeSel ? awaySel : homeSel).value = pool[0];
+  }
+  render();
+}
+homeSel.onchange = () => guard(homeSel);
+awaySel.onchange = () => guard(awaySel);
+document.getElementById("swap").onclick = () => {
+  [homeSel.value, awaySel.value] = [awaySel.value, homeSel.value];
+  render();
+};
+
+// ---- hover tooltip on matrix cells ----
+const tip = document.getElementById("tip");
+document.getElementById("mx").addEventListener("mouseover", e => {
+  const td = e.target.closest("td"); if (!td) return;
+  const i = td.dataset.i, j = td.dataset.j, p = +td.dataset.p;
+  tip.textContent = `${homeSel.value} ${i}–${j} ${awaySel.value}  ·  ${fmt(p)}`;
+  tip.style.opacity = 1;
+});
+document.getElementById("mx").addEventListener("mousemove", e => {
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
+  tip.style.top = (e.clientY - 34) + "px";
+});
+document.getElementById("mx").addEventListener("mouseleave", () => tip.style.opacity = 0);
+
+// ---- static panels ----
+document.getElementById("m-n").textContent = M.n_matches.toLocaleString();
+document.getElementById("m-s").textContent = M.seasons;
+document.getElementById("m-d").textContent = M.as_of;
+document.getElementById("m-h").textContent = M.home_adv.toFixed(3);
+document.getElementById("m-r").textContent = M.rho.toFixed(3);
+document.getElementById("s-h").textContent = M.home_adv.toFixed(3);
+document.getElementById("s-r").textContent = "ρ = " + M.rho.toFixed(3);
+document.getElementById("f-v").textContent = M.model_version;
+
+const live = M.teams.filter(t => t.weight >= 5)
+  .map(t => ({...t, net: t.attack - t.defence})).sort((a, b) => b.net - a.net);
+const span = Math.max(...live.map(t => Math.abs(t.net)));
+document.getElementById("ratings").innerHTML =
+  "<tr><th>#</th><th>Team</th><th style='text-align:right'>Attack</th><th style='text-align:right'>Defence</th>" +
+  "<th style='text-align:right'>Net</th><th style='text-align:right'>Weight</th></tr>" +
+  live.map((t, k) => `<tr>
+    <td class="n" style="color:var(--muted)">${k+1}</td>
+    <td>${t.name}${current.includes(t.name) ? "" : " <span style='color:var(--muted);font-size:11px'>(relegated)</span>"}</td>
+    <td class="n">${t.attack.toFixed(3)}</td>
+    <td class="n">${t.defence.toFixed(3)}</td>
+    <td class="n rankbar"><span class="fill" style="width:${(Math.abs(t.net)/span*100).toFixed(0)}%;background:var(${t.net >= 0 ? "--home" : "--away"})"></span><span>${t.net >= 0 ? "+" : ""}${t.net.toFixed(3)}</span></td>
+    <td class="n" style="color:var(--muted)">${t.weight.toFixed(0)}</td></tr>`).join("");
+
+document.getElementById("played").innerHTML =
+  "<tr><th>Date</th><th>Home</th><th style='text-align:center'>Score</th><th>Away</th></tr>" +
+  M.played.map(g => `<tr>
+    <td class="n" style="color:var(--muted);text-align:left">${g.d.slice(5)}</td>
+    <td style="font-weight:${g.hs > g.asc_ ? 600 : 400}">${g.h}</td>
+    <td class="n" style="text-align:center">${g.hs}&ndash;${g.asc_}</td>
+    <td style="font-weight:${g.asc_ > g.hs ? 600 : 400}">${g.a}</td></tr>`).join("");
+
+render();
+</script>

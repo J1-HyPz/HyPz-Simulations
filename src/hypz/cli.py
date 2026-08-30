@@ -11,6 +11,7 @@ import pandas as pd
 from .adapters.football_data import FootballDataAdapter
 from .db import connect, init_db, now_iso
 from .ingest import ingest_results, load_matches
+from .export_web import export as export_web
 from .models import dixon_coles
 
 ADAPTERS = {"pl": FootballDataAdapter}
@@ -137,6 +138,12 @@ def cmd_forecast(args) -> None:
               f"{lam:>7.2f}-{mu:<6.2f}{f'{i}-{j}':>11}")
 
 
+def cmd_export_web(args) -> None:
+    from pathlib import Path
+    out = export_web(Path(args.out), sport_id=args.sport, season=args.season)
+    print(f"wrote {out} ({out.stat().st_size:,} bytes)")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="hypz", description="HyPz sports simulator")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -162,6 +169,11 @@ def main() -> None:
     s.add_argument("--half-life", type=float, default=270.0)
     s.add_argument("--match", help='e.g. "Arsenal vs Chelsea"')
     s.add_argument("-n", type=int, default=10)
+
+    s = sub.add_parser("export-web"); s.set_defaults(func=cmd_export_web)
+    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--season", default="2026/27")
+    s.add_argument("--out", default="/data/web/fixture-model.html")
 
     args = p.parse_args()
     _setup_logging(args.verbose)

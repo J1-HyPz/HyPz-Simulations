@@ -25,6 +25,24 @@ docker exec hypz-sim python -m hypz.cli forecast --sport pl --match "Arsenal vs 
 
 `status` reports row counts and recent ingest runs.
 
+## The forecaster page
+
+```bash
+docker exec hypz-sim python -m hypz.cli export-web
+```
+
+Builds a single self-contained HTML file — no backend, no build step, nothing to
+install. The Dixon–Coles grid is closed form, so the page ships the fitted ratings
+and recomputes every matchup in the browser: pick any two teams and the scoreline
+distribution, outcome split and expected goals update live.
+
+The score matrix uses composite encoding — hue for the outcome, depth for the
+probability — so the draw diagonal falls out of the geometry rather than being
+drawn on. Re-run the command after any refit and the page regenerates.
+
+The JavaScript implementation is checked against the Python one: both produce
+identical probabilities to the displayed precision across every fixture tested.
+
 ## How it works
 
 **Data.** Premier League results come from football-data.co.uk — one plain CSV per
@@ -74,7 +92,7 @@ Adding a sport means writing an adapter, not touching the engine.
 | 2 | Walk-forward backtest, calibration, baselines | next |
 | 3 | Scheduling, watermarks, health dashboard | |
 | 4 | NFL (nflverse parquet, drive model) | |
-| 5 | Read API and web UI | |
+| 5 | Read API and web UI | partial — static page ships now |
 
 Phase 2 is the one that matters. Until a walk-forward backtest says otherwise,
 these forecasts are unvalidated — a model can look entirely reasonable and still
