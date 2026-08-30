@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from . import health as health_mod
+from . import matchcard
 from . import ratings
 from .db import connect
 from .export_web import build_payload
@@ -107,6 +108,20 @@ def api_fixtures():
             "WHERE g.sport_id=? AND g.status='scheduled' ORDER BY g.date_utc",
             (SPORT,)).fetchall()
     return {"fixtures": [dict(r) for r in rows]}
+
+
+@app.get("/api/schedule")
+def api_schedule(days: int = Query(7, ge=1, le=30), start: str | None = None):
+    """Fixtures from today (or `start`) through `days` ahead, each with its card."""
+    return matchcard.schedule(SPORT, days=days, today=start)
+
+
+@app.get("/api/match/{game_id:path}")
+def api_match(game_id: str):
+    c = matchcard.card(game_id, SPORT)
+    if c is None:
+        raise HTTPException(404, f"unknown game: {game_id}")
+    return c
 
 
 @app.get("/api/evaluation")

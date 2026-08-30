@@ -41,6 +41,8 @@ at `/api/docs`.
 |---|---|
 | `GET /` | the forecaster page |
 | `GET /api/forecast?home=X&away=Y` | any matchup: probabilities, expected goals, likeliest scorelines |
+| `GET /api/schedule?days=7` | fixtures from today onward, each with its full card |
+| `GET /api/match/{game_id}` | one fixture: form, head to head, stats, summary |
 | `GET /api/fixtures` | scheduled fixtures with their pre-kickoff forecast |
 | `GET /api/teams` | fitted ratings |
 | `GET /api/evaluation` | latest walk-forward result |
@@ -51,6 +53,32 @@ real: ingestion writes, serving reads, they share only the database, and either
 can be down without the other caring. The API never fits a model on request — it
 reloads ratings written by the scheduled `model.ratings` job — so a slow source
 can never make a page request hang.
+
+## The schedule
+
+```bash
+docker exec hypz-sim python -m hypz.cli schedule --days 7
+```
+
+Fixtures from today onward. Each carries, drawn entirely from data already held:
+
+- **Form** — last five matches per side, bounded to 400 days so a promoted team
+  shows "no recent matches in this division" rather than results from a previous spell
+- **Venue record** — home form for the home side, away form for the away side,
+  because a combined table hides the thing you want to know
+- **Head to head** — last six meetings, counted from the upcoming home side's view
+- **Rest days** — suppressed beyond 45 days, since a summer break or an absence
+  from the division is not rest
+- **Referee**, kickoff time, and the pre-kickoff model forecast
+- Once played: **shots, shots on target, corners, fouls, cards, half-time score**
+  and a generated factual summary
+
+### What is not there
+
+The source carries no team sheets and publishes only after full time, so
+**lineups** and **live in-play state** are absent. Both are stated in the API
+response under `unavailable` and on the page, rather than being quietly missing.
+Adding either needs a keyed provider.
 
 ## Running unattended
 
@@ -80,7 +108,7 @@ which is stronger evidence than any backtest.
 docker exec hypz-sim python -m pytest /app/tests -q
 ```
 
-27 tests, about a second. They cover the analytic gradient against numerical
+34 tests, about a second. They cover the analytic gradient against numerical
 differencing, the `as_of` cutoff that the whole backtest depends on, ingest
 idempotency and watermark contiguity, the leakage audit predicate, and two
 regressions for bugs found in Phase 3 (a stale watermark format, and a BOM that

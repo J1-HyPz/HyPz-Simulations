@@ -161,14 +161,49 @@ table.data td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabu
 .scorelist .track i{display:block; height:100%; border-radius:4px}
 .scorelist .pc{font-family:"IBM Plex Mono",monospace; font-size:12.5px; text-align:right; color:var(--ink-2)}
 
-.upnext{display:flex; flex-direction:column; gap:2px}
-.up{display:grid; grid-template-columns:62px minmax(0,1fr) 132px; gap:12px; align-items:center;
-  padding:9px 10px; border-radius:7px; background:var(--surface-2)}
-.up .d{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted)}
-.up .f{font-size:14px}
-.up .split{display:flex; height:20px; gap:2px}
-.up .split span{border-radius:3px; font-family:"IBM Plex Mono",monospace; font-size:9.5px;
+/* ---------- schedule ---------- */
+.day{margin-bottom:18px}
+.day h3{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted); font-weight:500; margin:0 0 8px;
+  padding-bottom:6px; border-bottom:1px solid var(--line)}
+details.g{background:var(--surface-2); border-radius:8px; margin-bottom:4px; overflow:hidden}
+details.g[open]{background:var(--surface-2); box-shadow:inset 0 0 0 1px var(--line-2)}
+details.g summary{list-style:none; cursor:pointer; padding:11px 13px;
+  display:grid; grid-template-columns:52px minmax(0,1fr) 150px 18px; gap:12px; align-items:center}
+details.g summary::-webkit-details-marker{display:none}
+details.g summary:hover{background:var(--line)}
+details.g summary:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+.g .ko{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted)}
+.g .tm{font-size:14.5px}
+.g .tm b{font-weight:600}
+.g .chev{color:var(--muted); font-size:11px; transition:transform .18s; justify-self:end}
+details.g[open] .chev{transform:rotate(90deg)}
+.g .ft{font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:600; text-align:right}
+.g .pr{display:flex; height:19px; gap:2px}
+.g .pr span{border-radius:3px; font-family:"IBM Plex Mono",monospace; font-size:9.5px;
   color:#fff; display:grid; place-items:center; overflow:hidden}
+.gd{padding:2px 13px 14px; display:grid; gap:14px}
+.gd .cols{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.gd .box{background:var(--surface); border-radius:7px; padding:11px 13px}
+.gd .box h4{margin:0 0 7px; font-size:10.5px; font-family:"IBM Plex Mono",monospace;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:500}
+.gd .kv{display:flex; justify-content:space-between; font-size:13px; padding:2px 0}
+.gd .kv span:last-child{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+.frm{display:flex; gap:3px; margin-top:3px}
+.frm i{width:17px; height:17px; border-radius:3px; display:grid; place-items:center;
+  font-family:"IBM Plex Mono",monospace; font-size:10px; font-weight:600; font-style:normal; color:#fff}
+.frm .W{background:var(--ok)} .frm .D{background:var(--muted)} .frm .L{background:var(--away)}
+.frm .none{color:var(--muted); font-size:12px; font-family:"IBM Plex Sans",sans-serif}
+.tug{display:grid; gap:6px}
+.tug .row{display:grid; grid-template-columns:34px 1fr 34px; gap:9px; align-items:center;
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-variant-numeric:tabular-nums}
+.tug .track{display:flex; height:7px; gap:2px}
+.tug .track i{display:block; border-radius:3px}
+.tug .lbl{grid-column:1 / -1; font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); margin-top:2px; font-family:"IBM Plex Mono",monospace}
+.summ{font-size:13.5px; color:var(--ink-2); line-height:1.55; margin:0}
+.caveat{font-size:12px; color:var(--muted); margin:10px 0 0; padding-top:10px;
+  border-top:1px solid var(--line)}
 .hz{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px}
 .hz .j{display:flex; align-items:center; gap:7px; padding:7px 11px; border-radius:7px;
   background:var(--surface-2); font-family:"IBM Plex Mono",monospace; font-size:11.5px}
@@ -268,10 +303,11 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; background:var(--su
   </div>
 </div>
 
-<section class="card" style="margin-top:20px" id="upcoming-card" hidden>
-  <h2>Next fixtures<span class="pill p-ok" id="hz-state"></span></h2>
-  <p class="note" id="up-note"></p>
-  <div class="upnext" id="upnext"></div>
+<section class="card" style="margin-top:20px" id="schedule-card" hidden>
+  <h2>Schedule<span class="pill p-ok" id="hz-state"></span></h2>
+  <p class="note" id="sched-note"></p>
+  <div id="schedule"></div>
+  <p class="caveat" id="sched-caveat"></p>
   <div class="hz" id="hz"></div>
 </section>
 
@@ -512,22 +548,110 @@ document.getElementById("played").innerHTML =
 
 try { render(); } catch (e) { console.error('render failed', e); }
 
-// ---------- next fixtures, forecast before kickoff ----------
-if (M.upcoming && M.upcoming.length){
-  document.getElementById("upcoming-card").hidden = false;
-  const stamped = M.upcoming[0].run_at ? M.upcoming[0].run_at.replace("T", " ").slice(0, 16) : "";
-  document.getElementById("up-note").textContent =
-    `${M.upcoming.length} scheduled fixtures. These forecasts were recorded before kickoff` +
-    (stamped ? `, at ${stamped} UTC.` : ".");
-  document.getElementById("upnext").innerHTML = M.upcoming.map(u => {
-    const seg = (c, v) => `<span class="${c}" style="flex:0 0 ${(v*100).toFixed(1)}%">${
-      v > 0.18 ? (v*100).toFixed(0) : ""}</span>`;
-    return `<div class="up">
-      <span class="d">${u.d.slice(5)}</span>
-      <span class="f">${u.h} <em style="color:var(--muted);font-style:normal">v</em> ${u.a}</span>
-      <span class="split">${seg("bh",u.hp)}${seg("bd",u.dp)}${seg("ba",u.ap)}</span>
-    </div>`;
+// ---------- schedule ----------
+const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = v => (v*100).toFixed(0) + "%";
+
+function formStrip(f){
+  if (!f || !f.played) return `<span class="none">no recent matches in this division</span>`;
+  return f.form.split("").map(r => `<i class="${r}">${r}</i>`).join("");
+}
+
+function tugRow(label, h, a){
+  const tot = (h + a) || 1;
+  return `<div class="row">
+    <span style="text-align:right">${h}</span>
+    <span class="track">
+      <i style="flex:0 0 ${(h/tot*100).toFixed(1)}%;background:var(--home)"></i>
+      <i style="flex:0 0 ${(a/tot*100).toFixed(1)}%;background:var(--away)"></i>
+    </span>
+    <span>${a}</span>
+    <span class="lbl">${label}</span></div>`;
+}
+
+const STAT_LABELS = [
+  ["shots", "Shots"], ["shots_on_target", "On target"], ["corners", "Corners"],
+  ["fouls", "Fouls"], ["yellows", "Yellow cards"], ["reds", "Red cards"],
+];
+
+function gameDetail(g){
+  const pm = g.pre_match, fh = pm.form.home, fa = pm.form.away;
+  const vh = pm.venue_record.home, va = pm.venue_record.away, h2h = pm.head_to_head;
+  const rest = v => v === null || v === undefined ? "&ndash;" : v + "d";
+
+  let blocks = `<div class="cols">
+    <div class="box"><h4>${esc(g.home)} &mdash; last 5</h4>
+      <div class="frm">${formStrip(fh)}</div>
+      <div class="kv" style="margin-top:8px"><span>Home this season</span>
+        <span>${vh.played ? `${vh.w}W ${vh.d}D ${vh.l}L` : "not played yet"}</span></div>
+      ${vh.played ? `<div class="kv"><span>Goals, home</span><span>${vh.gf}&ndash;${vh.ga}</span></div>` : ""}
+      <div class="kv"><span>Days since last match</span><span>${rest(pm.rest_days.home)}</span></div>
+    </div>
+    <div class="box"><h4>${esc(g.away)} &mdash; last 5</h4>
+      <div class="frm">${formStrip(fa)}</div>
+      <div class="kv" style="margin-top:8px"><span>Away this season</span>
+        <span>${va.played ? `${va.w}W ${va.d}D ${va.l}L` : "not played yet"}</span></div>
+      ${va.played ? `<div class="kv"><span>Goals, away</span><span>${va.gf}&ndash;${va.ga}</span></div>` : ""}
+      <div class="kv"><span>Days since last match</span><span>${rest(pm.rest_days.away)}</span></div>
+    </div></div>`;
+
+  if (h2h.meetings.length){
+    blocks += `<div class="box"><h4>Head to head &mdash; last ${h2h.meetings.length}</h4>
+      <div class="kv"><span>${esc(g.home)} ${h2h.home_wins} &middot; drawn ${h2h.draws} &middot; ${esc(g.away)} ${h2h.away_wins}</span><span></span></div>
+      ${h2h.meetings.map(m => `<div class="kv"><span>${m.date} &nbsp; ${esc(m.home)} v ${esc(m.away)}</span>
+        <span>${m.home_score}&ndash;${m.away_score}</span></div>`).join("")}</div>`;
+  }
+
+  if (g.result){
+    const st = g.result.stats || {};
+    const rows = STAT_LABELS.filter(([k]) => st[k]).map(([k, l]) => tugRow(l, st[k].h, st[k].a)).join("");
+    blocks += `<div class="box"><h4>Match statistics</h4>
+      ${rows ? `<div class="tug">${rows}</div>` : `<p class="summ">Not recorded for this match.</p>`}
+      <p class="summ" style="margin-top:12px">${esc(g.result.summary)}</p></div>`;
+  } else if (g.forecast){
+    blocks += `<div class="box"><h4>Forecast</h4>
+      <div class="kv"><span>${esc(g.home)} win</span><span>${pct(g.forecast.home)}</span></div>
+      <div class="kv"><span>Draw</span><span>${pct(g.forecast.draw)}</span></div>
+      <div class="kv"><span>${esc(g.away)} win</span><span>${pct(g.forecast.away)}</span></div>
+      ${g.referee ? `<div class="kv" style="margin-top:6px"><span>Referee</span><span>${esc(g.referee)}</span></div>` : ""}
+      <p class="summ" style="margin-top:10px">Recorded ${g.forecast.run_at.replace("T"," ").slice(0,16)} UTC, before kickoff.</p></div>`;
+  }
+  return `<div class="gd">${blocks}</div>`;
+}
+
+if (M.schedule && M.schedule.count){
+  document.getElementById("schedule-card").hidden = false;
+  const S = M.schedule;
+  document.getElementById("sched-note").textContent =
+    `${S.count} fixtures from ${S.from} to ${S.to}. Open a match for form, head to head and statistics.`;
+  document.getElementById("schedule").innerHTML = S.days.map(day => {
+    const heading = new Date(day.date + "T00:00:00Z").toLocaleDateString("en-GB",
+      {weekday:"long", day:"numeric", month:"long", timeZone:"UTC"});
+    return `<div class="day"><h3>${heading}</h3>` + day.games.map(g => {
+      const played = g.status === "final" && g.result;
+      const right = played
+        ? `<span class="ft">${g.result.score.home}&ndash;${g.result.score.away}</span>`
+        : g.forecast
+          ? `<span class="pr">
+               <span class="bh" style="flex:0 0 ${(g.forecast.home*100).toFixed(1)}%">${g.forecast.home>0.18?pct(g.forecast.home):""}</span>
+               <span class="bd" style="flex:0 0 ${(g.forecast.draw*100).toFixed(1)}%">${g.forecast.draw>0.18?pct(g.forecast.draw):""}</span>
+               <span class="ba" style="flex:0 0 ${(g.forecast.away*100).toFixed(1)}%">${g.forecast.away>0.18?pct(g.forecast.away):""}</span>
+             </span>`
+          : `<span class="ko" style="text-align:right">no forecast</span>`;
+      const hw = played && g.result.score.home > g.result.score.away;
+      const aw = played && g.result.score.away > g.result.score.home;
+      return `<details class="g"><summary>
+          <span class="ko">${g.kickoff || "&ndash;&ndash;:&ndash;&ndash;"}</span>
+          <span class="tm">${hw?"<b>":""}${esc(g.home)}${hw?"</b>":""}
+            <span style="color:var(--muted)">v</span>
+            ${aw?"<b>":""}${esc(g.away)}${aw?"</b>":""}</span>
+          ${right}<span class="chev">&#9654;</span>
+        </summary>${gameDetail(g)}</details>`;
+    }).join("") + `</div>`;
   }).join("");
+  document.getElementById("sched-caveat").innerHTML =
+    `Not shown, because the data source does not carry it: ` +
+    Object.entries(S.unavailable).map(([k,v]) => `<b>${k}</b> (${esc(v)})`).join("; ") + ".";
 }
 
 if (M.health){

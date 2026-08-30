@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS games (
     date_utc     TEXT NOT NULL,
     home_team_id INTEGER NOT NULL REFERENCES teams(team_id),
     away_team_id INTEGER NOT NULL REFERENCES teams(team_id),
-    status       TEXT NOT NULL DEFAULT 'scheduled'
+    status       TEXT NOT NULL DEFAULT 'scheduled',
+    kickoff      TEXT,
+    referee      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_games_sport_date ON games(sport_id, date_utc);
 CREATE INDEX IF NOT EXISTS idx_games_season     ON games(sport_id, season);
@@ -115,6 +117,11 @@ def connect() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        # Additive migrations for databases created before these columns existed.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(games)")}
+        for col in ("kickoff", "referee"):
+            if col not in cols:
+                conn.execute(f"ALTER TABLE games ADD COLUMN {col} TEXT")
 
 
 def upsert_sport(conn: sqlite3.Connection, sport_id: str, name: str, config: dict[str, Any]) -> None:

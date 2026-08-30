@@ -12,7 +12,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from . import ratings
+from . import matchcard, ratings
 from .config import DB_PATH
 from .ingest import load_matches
 from .models import dixon_coles
@@ -112,7 +112,14 @@ def build_payload(sport_id: str = "pl", season: str = "2026/27",
     except sqlite3.OperationalError:
         health = None
 
+    try:
+        sched = matchcard.schedule(sport_id, days=7)
+    except Exception as exc:            # a page must still render without it
+        log.warning("schedule unavailable: %s", exc)
+        sched = None
+
     return {
+        "schedule": sched,
         "upcoming": upcoming,
         "health": health,
         "evaluation": evaluation,

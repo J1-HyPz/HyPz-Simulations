@@ -28,6 +28,17 @@ def _strip_bom(raw: bytes) -> bytes:
 BASE_URL = "https://www.football-data.co.uk/mmz4281/{code}/E0.csv"
 FIXTURES_URL = "https://www.football-data.co.uk/fixtures.csv"
 DIVISION = "E0"
+
+# Team-level match statistics the results feed carries and we previously dropped.
+# Column pairs are (home, away) -> our key.
+STAT_COLUMNS = {
+    ("HS", "AS"): "shots",
+    ("HST", "AST"): "shots_on_target",
+    ("HC", "AC"): "corners",
+    ("HF", "AF"): "fouls",
+    ("HY", "AY"): "yellows",
+    ("HR", "AR"): "reds",
+}
 FIRST_SEASON_START = 1993
 
 CONFIG = SportConfig(
@@ -120,6 +131,26 @@ class FootballDataAdapter(SportAdapter):
                 val = getattr(row, src, None)
                 if val is not None and pd.notna(val):
                     extra[dst] = float(val)
+
+            # Match statistics. Absent in the earliest seasons, so every field is
+            # optional and a missing one is simply not recorded.
+            stats = {}
+            for (hcol, acol), key in STAT_COLUMNS.items():
+                hv, av = getattr(row, hcol, None), getattr(row, acol, None)
+                if hv is not None and av is not None and pd.notna(hv) and pd.notna(av):
+                    stats[key] = {"h": int(hv), "a": int(av)}
+            if stats:
+                extra["stats"] = stats
+            for src, dst in (("HTHG", "h"), ("HTAG", "a")):
+                val = getattr(row, src, None)
+                if val is not None and pd.notna(val):
+                    extra.setdefault("half_time", {})[dst] = int(val)
+            ref = getattr(row, "Referee", None)
+            if ref is not None and pd.notna(ref) and str(ref).strip():
+                extra["referee"] = str(ref).strip()
+            ko = getattr(row, "Time", None)
+            if ko is not None and pd.notna(ko) and str(ko).strip():
+                extra["kickoff"] = str(ko).strip()
             records.append(
                 GameRecord(
                     season=label,
@@ -155,8 +186,16 @@ class FootballDataAdapter(SportAdapter):
         for row in df.itertuples(index=False):
             d = row.match_date.date()
             extra = {}
-            if getattr(row, "Time", None) and pd.notna(row.Time):
-                extra["kickoff"] = str(row.Time)
+            if getattr(row, "Time", None) is not None and pd.notna(row.Time):
+                extra["kickoff"] = str(row.Time).strip()
+            ref = getattr(row, "Referee", None)
+            if ref is not None and pd.notna(ref) and str(ref).strip():
+                extra["referee"] = str(ref).strip()
+            # Pre-match prices; the closing line only exists once a match is played.
+            for src, dst in (("B365H", "open_h"), ("B365D", "open_d"), ("B365A", "open_a")):
+                val = getattr(row, src, None)
+                if val is not None and pd.notna(val):
+                    extra[dst] = float(val)
             out.append(GameRecord(
                 season=season_label(current_season_start(d)),
                 date_utc=d.isoformat(),

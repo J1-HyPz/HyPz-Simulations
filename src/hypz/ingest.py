@@ -34,11 +34,16 @@ def _upsert_game(conn, cfg, rec: GameRecord) -> str:
     h = team_id(conn, cfg.sport_id, rec.home_team)
     a = team_id(conn, cfg.sport_id, rec.away_team)
     conn.execute(
-        "INSERT INTO games (game_id, sport_id, season, date_utc, home_team_id, away_team_id, status) "
-        "VALUES (?,?,?,?,?,?,?) ON CONFLICT(game_id) DO UPDATE SET "
-        "season=excluded.season, date_utc=excluded.date_utc, status=excluded.status",
+        "INSERT INTO games (game_id, sport_id, season, date_utc, home_team_id, away_team_id,"
+        " status, kickoff, referee) VALUES (?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(game_id) DO UPDATE SET season=excluded.season, "
+        "date_utc=excluded.date_utc, status=excluded.status, "
+        # A later feed may not repeat these, so never overwrite a value with null.
+        "kickoff=COALESCE(excluded.kickoff, games.kickoff), "
+        "referee=COALESCE(excluded.referee, games.referee)",
         (gid, cfg.sport_id, rec.season, rec.date_utc, h, a,
-         "final" if rec.is_played else "scheduled"),
+         "final" if rec.is_played else "scheduled",
+         rec.extra.get("kickoff"), rec.extra.get("referee")),
     )
     return gid
 

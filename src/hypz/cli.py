@@ -11,6 +11,7 @@ import pandas as pd
 from .adapters.football_data import FootballDataAdapter
 from .db import connect, init_db, now_iso
 from . import health as health_mod
+from . import matchcard
 from .ingest import ingest_fixtures, ingest_results, load_matches
 from .predict import forecast_scheduled, scored_forecasts
 from . import backtest as bt
@@ -254,6 +255,52 @@ def cmd_backtest(args) -> None:
         print(f"predictions written to {args.out}")
 
 
+def cmd_schedule(args) -> None:
+    sched = matchcard.schedule(args.sport, days=args.days, today=args.start)
+    print(f"\n{sched['count']} fixture(s), {sched['from']} to {sched['to']}")
+    if not sched["count"]:
+        print("  nothing scheduled in that window")
+        return
+    for day in sched["days"]:
+        print(f"\n{date_heading(day['date'])}")
+        for g in day["games"]:
+            ko = g["kickoff"] or "--:--"
+            line = f"  {ko}  {g['home']} v {g['away']}"
+            if g["status"] == "final" and g["result"]:
+                r = g["result"]["score"]
+                line += f"   {r['home']}-{r['away']}  FT"
+            elif g["forecast"]:
+                f = g["forecast"]
+                line += f"   {f['home']:.0%}/{f['draw']:.0%}/{f['away']:.0%}"
+            print(line)
+            fh = g["pre_match"]["form"]["home"]; fa = g["pre_match"]["form"]["away"]
+            h2h = g["pre_match"]["head_to_head"]
+            print(f"        form {fh['form'] or '-':<5} v {fa['form'] or '-':<5}"
+                  f"   h2h {h2h['home_wins']}-{h2h['draws']}-{h2h['away_wins']}"
+                  f"   rest {_rest(g['pre_match']['rest_days']['home'])}/"
+                  f"{_rest(g['pre_match']['rest_days']['away'])}"
+                  + (f"   ref {g['referee']}" if g["referee"] else ""))
+            if g["status"] == "final" and g["result"]:
+                print(f"        {g['result']['summary']}")
+
+
+def _rest(v):
+    return f"{v}d" if v is not None else "-"
+
+
+def date_heading(d: str) -> str:
+    from datetime import date as _d
+    return _d.fromisoformat(d).strftime("%a %d %b")
+
+
+def cmd_match(args) -> None:
+    import json as _json
+    c = matchcard.card(args.game_id, args.sport)
+    if c is None:
+        raise SystemExit(f"unknown game: {args.game_id}")
+    print(_json.dumps(c, indent=2))
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="hypz", description="HyPz sports simulator")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -305,6 +352,15 @@ def main() -> None:
     s.add_argument("--half-life", type=float, default=270.0)
     s.add_argument("--save", action="store_true")
     s.add_argument("--out", help="write per-match predictions to CSV")
+
+    s = sub.add_parser("schedule"); s.set_defaults(func=cmd_schedule)
+    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--days", type=int, default=7)
+    s.add_argument("--start", help="ISO date; defaults to today")
+
+    s = sub.add_parser("match"); s.set_defaults(func=cmd_match)
+    s.add_argument("game_id")
+    s.add_argument("--sport", default="pl", choices=ADAPTERS)
 
     args = p.parse_args()
     _setup_logging(args.verbose)
