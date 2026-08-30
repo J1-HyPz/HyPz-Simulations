@@ -11,7 +11,9 @@ import pandas as pd
 from .adapters.football_data import FootballDataAdapter
 from .db import connect, init_db, now_iso
 from . import health as health_mod
+from . import lineups as lineups_mod
 from . import matchcard
+from .adapters import api_football as af
 from .ingest import ingest_fixtures, ingest_results, load_matches
 from .predict import forecast_scheduled, scored_forecasts
 from . import backtest as bt
@@ -301,6 +303,31 @@ def cmd_match(args) -> None:
     print(_json.dumps(c, indent=2))
 
 
+def cmd_lineups(args) -> None:
+    client = af.Client()
+    if not client.configured:
+        raise SystemExit(
+            f"{af.KEY_ENV} is not set.\n"
+            "  1. Create a free account at https://dashboard.api-football.com\n"
+            "  2. Put the key in .env next to docker-compose.yml:\n"
+            f"       {af.KEY_ENV}=your-key-here\n"
+            "  3. docker compose up -d")
+    if args.quota:
+        q = client.quota()
+        print(f"plan {q['plan']}  used {q['used']} of {q['limit']} today")
+        return
+    mapped = lineups_mod.sync_fixture_ids(client) if args.sync else 0
+    n = lineups_mod.fetch_lineups(client, lookahead_hours=args.hours)
+    print(f"mapped {mapped} fixture id(s), stored {n} lineup(s), "
+          f"{client.calls} api call(s)")
+    with connect() as conn:
+        un = conn.execute("SELECT raw_name, context FROM unmatched_names").fetchall()
+    if un:
+        print("\nunmatched names needing review:")
+        for r in un:
+            print(f"  {r['raw_name']}  ({r['context']})")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="hypz", description="HyPz sports simulator")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -361,6 +388,11 @@ def main() -> None:
     s = sub.add_parser("match"); s.set_defaults(func=cmd_match)
     s.add_argument("game_id")
     s.add_argument("--sport", default="pl", choices=ADAPTERS)
+
+    s = sub.add_parser("lineups"); s.set_defaults(func=cmd_lineups)
+    s.add_argument("--sync", action="store_true", help="refresh fixture id mapping first")
+    s.add_argument("--hours", type=int, default=6, help="lookahead window")
+    s.add_argument("--quota", action="store_true", help="report remaining daily allowance")
 
     args = p.parse_args()
     _setup_logging(args.verbose)

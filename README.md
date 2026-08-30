@@ -42,7 +42,7 @@ at `/api/docs`.
 | `GET /` | the forecaster page |
 | `GET /api/forecast?home=X&away=Y` | any matchup: probabilities, expected goals, likeliest scorelines |
 | `GET /api/schedule?days=7` | fixtures from today onward, each with its full card |
-| `GET /api/match/{game_id}` | one fixture: form, head to head, stats, summary |
+| `GET /api/match/{game_id}` | one fixture: form, head to head, lineups, stats, summary |
 | `GET /api/fixtures` | scheduled fixtures with their pre-kickoff forecast |
 | `GET /api/teams` | fitted ratings |
 | `GET /api/evaluation` | latest walk-forward result |
@@ -73,12 +73,31 @@ Fixtures from today onward. Each carries, drawn entirely from data already held:
 - Once played: **shots, shots on target, corners, fouls, cards, half-time score**
   and a generated factual summary
 
-### What is not there
+### Lineups
 
-The source carries no team sheets and publishes only after full time, so
-**lineups** and **live in-play state** are absent. Both are stated in the API
-response under `unavailable` and on the page, rather than being quietly missing.
-Adding either needs a keyed provider.
+Starting lineups come from API-Football, which is optional. Without a key the
+pipeline runs exactly as before and the page says lineups are unavailable and why.
+
+```bash
+cp .env.example .env      # then paste your key into it
+docker compose up -d
+docker exec hypz-sim python -m hypz.cli lineups --sync
+```
+
+A free account at [dashboard.api-football.com](https://dashboard.api-football.com)
+allows 100 requests a day, and this uses about eleven per matchweek: one to map
+fixture ids, then one per fixture, never repeated once a lineup is stored.
+`hypz lineups --quota` reports what is left.
+
+The two sources name teams differently — "Manchester United" against "Man United" —
+so identifiers are resolved once by alias then fuzzy match, stored on the team row,
+and never recomputed. Anything unresolved goes to `unmatched_names` for review
+rather than being guessed at, and `hypz lineups` prints the queue.
+
+### Still not there
+
+**Live in-play state.** The results feed publishes only after full time. This is
+reported in the API response under `unavailable` rather than being quietly missing.
 
 ## Running unattended
 
@@ -88,6 +107,7 @@ The container's main process is an APScheduler daemon:
 |---|---|
 | `ingest.results` | 04:00 daily |
 | `ingest.fixtures` | 08:00 and 20:00 |
+| `ingest.lineups` | hourly at :20 (only spends a call when a fixture is imminent) |
 | `model.ratings` | 04:45 daily |
 | `model.forecast` | 05:00 daily |
 | `export.web` | 05:15 daily |
@@ -108,7 +128,7 @@ which is stronger evidence than any backtest.
 docker exec hypz-sim python -m pytest /app/tests -q
 ```
 
-34 tests, about a second. They cover the analytic gradient against numerical
+57 tests, about two seconds. They cover the analytic gradient against numerical
 differencing, the `as_of` cutoff that the whole backtest depends on, ingest
 idempotency and watermark contiguity, the leakage audit predicate, and two
 regressions for bugs found in Phase 3 (a stale watermark format, and a BOM that

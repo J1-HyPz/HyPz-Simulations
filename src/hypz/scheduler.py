@@ -22,7 +22,10 @@ from .adapters.football_data import FootballDataAdapter
 from .export_web import export
 from .ingest import ingest_fixtures, ingest_results, load_matches
 from .models import dixon_coles
+from . import lineups as lineups_mod
 from . import ratings
+from .adapters import api_football as af
+from .db import connect
 from .predict import forecast_scheduled
 
 log = logging.getLogger(__name__)
@@ -49,6 +52,28 @@ def job_fixtures():
     _run("ingest.fixtures", ingest_fixtures, FootballDataAdapter())
 
 
+def job_lineups():
+    """Sync fixture ids when something new appears, then fetch imminent lineups.
+
+    Skips silently when no key is configured - lineups are an optional enrichment,
+    not a dependency of the pipeline.
+    """
+    def _work():
+        client = af.Client()
+        if not client.configured:
+            log.info("API_FOOTBALL_KEY not set; skipping lineups")
+            return "skipped"
+        with connect() as conn:
+            unmapped = conn.execute(
+                "SELECT COUNT(*) c FROM games WHERE sport_id='pl' AND status='scheduled' "
+                "AND external_ids_json NOT LIKE ?", (f'%"{lineups_mod.SOURCE}"%',)
+            ).fetchone()["c"]
+        if unmapped:
+            lineups_mod.sync_fixture_ids(client)
+        return lineups_mod.fetch_lineups(client)
+    _run("ingest.lineups", _work)
+
+
 def job_ratings():
     def _fit_and_store():
         m = load_matches("pl")
@@ -72,6 +97,9 @@ def build_scheduler() -> BlockingScheduler:
     # Results land overnight; everything downstream follows in order.
     sched.add_job(job_results, cron(hour=4, minute=0), id="ingest.results")
     sched.add_job(job_fixtures, cron(hour="8,20", minute=0), id="ingest.fixtures")
+    # Lineups appear shortly before kickoff, so this checks often; it only spends
+    # an API call when a fixture is imminent and not already stored.
+    sched.add_job(job_lineups, cron(minute=20), id="ingest.lineups")
     sched.add_job(job_ratings, cron(hour=4, minute=45), id="model.ratings")
     sched.add_job(job_forecast, cron(hour=5, minute=0), id="model.forecast")
     sched.add_job(job_export, cron(hour=5, minute=15), id="export.web")
@@ -87,7 +115,8 @@ def main() -> None:
     if os.environ.get("HYPZ_RUN_ON_START", "1") == "1":
         # A fresh container should be useful immediately rather than at 04:00.
         log.info("priming: running every job once")
-        job_results(); job_fixtures(); job_ratings(); job_forecast(); job_export()
+        job_results(); job_fixtures(); job_ratings(); job_forecast()
+        job_lineups(); job_export()
 
     sched = build_scheduler()
     for j in sched.get_jobs():

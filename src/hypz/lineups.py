@@ -1,0 +1,247 @@
+"""Starting lineups from API-Football.
+
+Two problems to solve beyond fetching. First, the two sources name teams
+differently ("Manchester United" against "Man United"), so identifiers are
+resolved once by alias and fuzzy match, stored, and never recomputed; anything
+unresolved goes to a queue for review rather than being guessed at (design doc
+section 5). Second, the free tier allows 100 requests a day, so every call is
+budgeted and a lineup is never fetched twice.
+"""
+from __future__ import annotations
+
+import difflib
+import json
+import logging
+import re
+from datetime import datetime, timedelta, timezone
+
+from .adapters import api_football as af
+from .db import IngestRun, connect, now_iso
+
+log = logging.getLogger(__name__)
+
+SOURCE = "api_football"
+
+# Cases fuzzy matching gets wrong or would rank ambiguously.
+ALIASES = {
+    "manchester united": "Man United",
+    "manchester city": "Man City",
+    "nottingham forest": "Nott'm Forest",
+    "newcastle united": "Newcastle",
+    "wolverhampton wanderers": "Wolves",
+    "brighton and hove albion": "Brighton",
+    "west ham united": "West Ham",
+    "leeds united": "Leeds",
+    "leicester city": "Leicester",
+    "sheffield united": "Sheffield United",
+    "ipswich town": "Ipswich",
+    "hull city": "Hull",
+    "norwich city": "Norwich",
+    "cardiff city": "Cardiff",
+    "stoke city": "Stoke",
+    "swansea city": "Swansea",
+    "birmingham city": "Birmingham",
+    "queens park rangers": "QPR",
+    "west bromwich albion": "West Brom",
+    "tottenham hotspur": "Tottenham",
+    "afc bournemouth": "Bournemouth",
+    "luton town": "Luton",
+}
+
+# Lineups are published shortly before kickoff, so there is no point looking
+# earlier and no point paying for a fixture already under way.
+LOOKAHEAD_HOURS = 6
+MIN_QUOTA_HEADROOM = 5
+
+
+def _norm(name: str) -> str:
+    n = name.lower().replace("&", "and")
+    for junk in (" football club", " fc", " afc"):
+        n = n.replace(junk, "")
+    n = re.sub(r"[^a-z0-9 ]", " ", n)
+    return " ".join(n.split())
+
+
+def resolve_team(raw: str, known: list[str]) -> tuple[str | None, str]:
+    """Map an external team name onto one of ours.
+
+    Returns (matched_name, how). `how` is one of alias / exact / fuzzy / unmatched,
+    so the caller can log how confident the match was.
+    """
+    n = _norm(raw)
+    if n in ALIASES and ALIASES[n] in known:
+        return ALIASES[n], "alias"
+    by_norm = {_norm(k): k for k in known}
+    if n in by_norm:
+        return by_norm[n], "exact"
+    close = difflib.get_close_matches(n, list(by_norm), n=1, cutoff=0.82)
+    if close:
+        return by_norm[close[0]], "fuzzy"
+    return None, "unmatched"
+
+
+def _record_unmatched(conn, sport_id: str, raw: str, context: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO unmatched_names (sport_id, source, raw_name, context, first_seen) "
+        "VALUES (?,?,?,?,?)", (sport_id, SOURCE, raw, context, now_iso()))
+
+
+def sync_fixture_ids(client: af.Client | None = None, sport_id: str = "pl",
+                     season: int | None = None) -> int:
+    """Learn API-Football's fixture id for each of our scheduled games.
+
+    One request. Matching is on date plus both resolved team names, so a fixture
+    that moved date simply fails to match rather than binding to the wrong game.
+    """
+    client = client or af.Client()
+    if not client.configured:
+        raise af.NotConfigured(f"{af.KEY_ENV} is not set")
+
+    with connect() as conn:
+        with IngestRun(conn, job="ingest.lineups", sport_id=sport_id) as run:
+            known = [r["name"] for r in conn.execute(
+                "SELECT name FROM teams WHERE sport_id=?", (sport_id,))]
+            rows = conn.execute(
+                "SELECT g.game_id, g.date_utc, th.name home, ta.name away, g.external_ids_json "
+                "FROM games g JOIN teams th ON th.team_id=g.home_team_id "
+                "JOIN teams ta ON ta.team_id=g.away_team_id "
+                "WHERE g.sport_id=? AND g.status='scheduled'", (sport_id,)).fetchall()
+            if not rows:
+                log.info("no scheduled games to map")
+                return 0
+
+            dates = sorted(r["date_utc"] for r in rows)
+            if season is None:
+                # API-Football labels a season by the calendar year it starts in.
+                y = int(dates[0][:4])
+                season = y if int(dates[0][5:7]) >= 7 else y - 1
+
+            fixtures = [f for f in (af.parse_fixture(i) for i in
+                                    client.fixtures(season, date_from=dates[0], date_to=dates[-1]))
+                        if f]
+            log.info("%d fixtures returned for season %s", len(fixtures), season)
+
+            index = {}
+            for f in fixtures:
+                h, how_h = resolve_team(f["home"], known)
+                a, how_a = resolve_team(f["away"], known)
+                if h is None:
+                    _record_unmatched(conn, sport_id, f["home"], "api-football fixture home")
+                if a is None:
+                    _record_unmatched(conn, sport_id, f["away"], "api-football fixture away")
+                if h and a:
+                    index[(f["date"], h, a)] = f
+                    if "fuzzy" in (how_h, how_a):
+                        log.info("fuzzy team match: %s -> %s, %s -> %s",
+                                 f["home"], h, f["away"], a)
+
+            for r in rows:
+                f = index.get((r["date_utc"], r["home"], r["away"]))
+                if not f:
+                    continue
+                ext = json.loads(r["external_ids_json"] or "{}")
+                if ext.get(SOURCE) == f["fixture_id"]:
+                    continue
+                ext[SOURCE] = f["fixture_id"]
+                conn.execute("UPDATE games SET external_ids_json=? WHERE game_id=?",
+                             (json.dumps(ext), r["game_id"]))
+                run.rows += 1
+            log.info("mapped %d fixture ids (%d api calls)", run.rows, client.calls)
+            return run.rows
+
+
+def fetch_lineups(client: af.Client | None = None, sport_id: str = "pl",
+                  lookahead_hours: int = LOOKAHEAD_HOURS, max_calls: int = 20,
+                  now: datetime | None = None) -> int:
+    """Fetch lineups for imminent fixtures we do not already have."""
+    client = client or af.Client()
+    if not client.configured:
+        raise af.NotConfigured(f"{af.KEY_ENV} is not set")
+    now = now or datetime.now(timezone.utc)
+    horizon = now + timedelta(hours=lookahead_hours)
+
+    with connect() as conn:
+        with IngestRun(conn, job="ingest.lineups", sport_id=sport_id) as run:
+            known = [r["name"] for r in conn.execute(
+                "SELECT name FROM teams WHERE sport_id=?", (sport_id,))]
+            ids = {r["name"]: r["team_id"] for r in conn.execute(
+                "SELECT team_id, name FROM teams WHERE sport_id=?", (sport_id,))}
+            candidates = conn.execute(
+                "SELECT g.game_id, g.date_utc, g.kickoff, g.external_ids_json "
+                "FROM games g WHERE g.sport_id=? AND g.status='scheduled' "
+                "AND g.external_ids_json LIKE ? "
+                "AND NOT EXISTS (SELECT 1 FROM lineups l WHERE l.game_id=g.game_id) "
+                "ORDER BY g.date_utc, g.kickoff",
+                (sport_id, f'%"{SOURCE}"%')).fetchall()
+
+            due = []
+            for r in candidates:
+                match_day = datetime.fromisoformat(
+                    f"{r['date_utc']}T00:00:00+00:00").date()
+                if r["kickoff"]:
+                    try:
+                        when = datetime.fromisoformat(
+                            f"{r['date_utc']}T{r['kickoff']}:00+00:00")
+                    except ValueError:
+                        when = None
+                else:
+                    when = None
+                if when is not None:
+                    # Known kickoff: a tight window around it.
+                    if now - timedelta(hours=3) <= when <= horizon:
+                        due.append(r)
+                elif now.date() <= match_day <= horizon.date():
+                    # Unknown kickoff. Treating it as midnight would make every
+                    # such fixture look long finished, so the whole match day is
+                    # eligible instead.
+                    due.append(r)
+            if not due:
+                log.info("no fixtures within %dh awaiting lineups", lookahead_hours)
+                return 0
+
+            for r in due[:max_calls]:
+                fixture_id = json.loads(r["external_ids_json"])[SOURCE]
+                try:
+                    payload = client.lineups(fixture_id)
+                except af.ApiFootballError as exc:
+                    log.warning("lineup fetch failed for %s: %s", r["game_id"], exc)
+                    break            # quota or outage; stop rather than burn calls
+                if not payload:
+                    log.info("lineups not published yet for %s", r["game_id"])
+                    continue
+                for raw in payload:
+                    ln = af.parse_lineup(raw)
+                    if ln is None:
+                        continue
+                    team, _ = resolve_team(ln["team_name"], known)
+                    if team is None or team not in ids:
+                        _record_unmatched(conn, sport_id, ln["team_name"], "api-football lineup")
+                        continue
+                    conn.execute(
+                        "INSERT OR REPLACE INTO lineups (game_id, team_id, formation, coach,"
+                        " players_json, source, fetched_at) VALUES (?,?,?,?,?,?,?)",
+                        (r["game_id"], ids[team], ln["formation"], ln["coach"],
+                         json.dumps({"start_xi": ln["start_xi"],
+                                     "substitutes": ln["substitutes"]}),
+                         SOURCE, now_iso()))
+                    run.rows += 1
+            log.info("stored %d lineups (%d api calls)", run.rows, client.calls)
+            return run.rows
+
+
+def for_game(game_id: str) -> dict | None:
+    """Both teams' lineups for one game, keyed home/away."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT l.*, t.name, g.home_team_id FROM lineups l "
+            "JOIN teams t ON t.team_id=l.team_id JOIN games g ON g.game_id=l.game_id "
+            "WHERE l.game_id=?", (game_id,)).fetchall()
+    if not rows:
+        return None
+    out = {}
+    for r in rows:
+        side = "home" if r["team_id"] == r["home_team_id"] else "away"
+        out[side] = {"team": r["name"], "formation": r["formation"], "coach": r["coach"],
+                     "source": r["source"], "fetched_at": r["fetched_at"],
+                     **json.loads(r["players_json"])}
+    return out or None

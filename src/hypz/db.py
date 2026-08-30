@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS teams (
     team_id  INTEGER PRIMARY KEY AUTOINCREMENT,
     sport_id TEXT NOT NULL REFERENCES sports(sport_id),
     name     TEXT NOT NULL,
+    -- Design doc section 6: {"api_football": 33, ...}. Resolution happens once
+    -- and is stored, so the fuzzy match never runs on the hot path.
+    external_ids_json TEXT NOT NULL DEFAULT '{}',
     UNIQUE (sport_id, name)
 );
 
@@ -40,7 +43,8 @@ CREATE TABLE IF NOT EXISTS games (
     away_team_id INTEGER NOT NULL REFERENCES teams(team_id),
     status       TEXT NOT NULL DEFAULT 'scheduled',
     kickoff      TEXT,
-    referee      TEXT
+    referee      TEXT,
+    external_ids_json TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_games_sport_date ON games(sport_id, date_utc);
 CREATE INDEX IF NOT EXISTS idx_games_season     ON games(sport_id, season);
@@ -70,6 +74,31 @@ CREATE TABLE IF NOT EXISTS ingest_watermarks (
     sport_id                TEXT NOT NULL,
     last_successful_through TEXT,
     PRIMARY KEY (job, sport_id)
+);
+
+-- Starting lineups. One row per team per game; players_json holds the XI and the
+-- bench. Sourced separately from results, so a missing lineup is normal rather
+-- than an error.
+CREATE TABLE IF NOT EXISTS lineups (
+    game_id     TEXT NOT NULL REFERENCES games(game_id),
+    team_id     INTEGER NOT NULL REFERENCES teams(team_id),
+    formation   TEXT,
+    coach       TEXT,
+    players_json TEXT NOT NULL,
+    source      TEXT NOT NULL,
+    fetched_at  TEXT NOT NULL,
+    PRIMARY KEY (game_id, team_id)
+);
+
+-- Names the resolver could not match to a team, kept for review rather than
+-- guessed at (design doc section 5).
+CREATE TABLE IF NOT EXISTS unmatched_names (
+    sport_id   TEXT NOT NULL,
+    source     TEXT NOT NULL,
+    raw_name   TEXT NOT NULL,
+    context    TEXT,
+    first_seen TEXT NOT NULL,
+    PRIMARY KEY (sport_id, source, raw_name)
 );
 
 CREATE TABLE IF NOT EXISTS team_ratings (
@@ -122,6 +151,13 @@ def init_db() -> None:
         for col in ("kickoff", "referee"):
             if col not in cols:
                 conn.execute(f"ALTER TABLE games ADD COLUMN {col} TEXT")
+        if "external_ids_json" not in cols:
+            conn.execute("ALTER TABLE games ADD COLUMN external_ids_json TEXT "
+                         "NOT NULL DEFAULT '{}'")
+        tcols = {r[1] for r in conn.execute("PRAGMA table_info(teams)")}
+        if "external_ids_json" not in tcols:
+            conn.execute("ALTER TABLE teams ADD COLUMN external_ids_json TEXT "
+                         "NOT NULL DEFAULT '{}'")
 
 
 def upsert_sport(conn: sqlite3.Connection, sport_id: str, name: str, config: dict[str, Any]) -> None:

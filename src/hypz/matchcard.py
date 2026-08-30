@@ -12,6 +12,7 @@ import json
 import logging
 from datetime import date, datetime, timedelta
 
+from . import lineups as lineups_mod
 from .db import connect
 
 log = logging.getLogger(__name__)
@@ -22,10 +23,21 @@ log = logging.getLogger(__name__)
 FORM_MAX_AGE_DAYS = 400
 REST_MAX_DAYS = 45
 
-LIMITATIONS = {
-    "lineups": "football-data.co.uk publishes no team sheets; needs a keyed provider",
+LIVE_LIMITATION = {
     "live": "the results feed publishes after full time, so there is no in-play state",
 }
+NO_LINEUP_SOURCE = {
+    "lineups": "no lineup provider configured; set API_FOOTBALL_KEY to enable",
+}
+
+
+def limitations() -> dict:
+    """What this deployment cannot show, given how it is configured."""
+    from .adapters import api_football as _af
+    out = dict(LIVE_LIMITATION)
+    if not _af.Client().configured:
+        out.update(NO_LINEUP_SOURCE)
+    return out
 
 _GAME_SELECT = """
 SELECT g.game_id, g.date_utc, g.season, g.status, g.kickoff, g.referee,
@@ -224,7 +236,8 @@ def card(game_id: str, sport_id: str = "pl") -> dict | None:
                 "market": {k: extra[k] for k in ("open_h", "open_d", "open_a") if k in extra} or None,
             },
             "result": _post_match(row),
-            "unavailable": LIMITATIONS,
+            "lineups": lineups_mod.for_game(game_id),
+            "unavailable": limitations(),
         }
         return out
 
@@ -244,5 +257,5 @@ def schedule(sport_id: str = "pl", days: int = 7, today: str | None = None) -> d
     return {
         "from": start, "to": end, "count": len(games),
         "days": [{"date": d, "games": by_day[d]} for d in sorted(by_day)],
-        "unavailable": LIMITATIONS,
+        "unavailable": limitations(),
     }
