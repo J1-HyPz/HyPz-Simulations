@@ -32,11 +32,20 @@ NO_LINEUP_SOURCE = {
 
 
 def limitations() -> dict:
-    """What this deployment cannot show, given how it is configured."""
+    """What this deployment cannot show, given how it is configured.
+
+    A key being present is not the same as lineups being available: the provider's
+    free plan covers only past seasons, and reporting nothing in that case would
+    leave an unexplained blank.
+    """
     from .adapters import api_football as _af
     out = dict(LIVE_LIMITATION)
     if not _af.Client().configured:
         out.update(NO_LINEUP_SOURCE)
+    else:
+        restriction = lineups_mod.plan_restriction()
+        if restriction:
+            out["lineups"] = f"provider plan does not cover this season ({restriction})"
     return out
 
 _GAME_SELECT = """

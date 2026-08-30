@@ -16,11 +16,14 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from .adapters import api_football as af
-from .db import IngestRun, connect, now_iso
+from .db import IngestRun, connect, get_state, now_iso, set_state
 
 log = logging.getLogger(__name__)
 
 SOURCE = "api_football"
+# Records that the configured plan cannot serve the current season, so the page
+# can say lineups are unavailable and why, instead of silently showing none.
+PLAN_STATE_KEY = "lineups.plan_restriction"
 
 # Cases fuzzy matching gets wrong or would rank ambiguously.
 ALIASES = {
@@ -87,7 +90,7 @@ def _record_unmatched(conn, sport_id: str, raw: str, context: str) -> None:
 
 
 def sync_fixture_ids(client: af.Client | None = None, sport_id: str = "pl",
-                     season: int | None = None) -> int:
+                     season: int | None = None, games_sql_extra: str = "") -> int:
     """Learn API-Football's fixture id for each of our scheduled games.
 
     One request. Matching is on date plus both resolved team names, so a fixture
@@ -116,9 +119,15 @@ def sync_fixture_ids(client: af.Client | None = None, sport_id: str = "pl",
                 y = int(dates[0][:4])
                 season = y if int(dates[0][5:7]) >= 7 else y - 1
 
-            fixtures = [f for f in (af.parse_fixture(i) for i in
-                                    client.fixtures(season, date_from=dates[0], date_to=dates[-1]))
-                        if f]
+            try:
+                raw = client.fixtures(season, date_from=dates[0], date_to=dates[-1])
+            except af.PlanRestriction as exc:
+                # Not a fault: the key works, the plan does not reach this season.
+                set_state(conn, PLAN_STATE_KEY, str(exc))
+                log.warning("lineups unavailable on this plan: %s", exc)
+                return 0
+            set_state(conn, PLAN_STATE_KEY, None)
+            fixtures = [f for f in (af.parse_fixture(i) for i in raw) if f]
             log.info("%d fixtures returned for season %s", len(fixtures), season)
 
             index = {}
@@ -203,6 +212,10 @@ def fetch_lineups(client: af.Client | None = None, sport_id: str = "pl",
                 fixture_id = json.loads(r["external_ids_json"])[SOURCE]
                 try:
                     payload = client.lineups(fixture_id)
+                except af.PlanRestriction as exc:
+                    set_state(conn, PLAN_STATE_KEY, str(exc))
+                    log.warning("lineups unavailable on this plan: %s", exc)
+                    break
                 except af.ApiFootballError as exc:
                     log.warning("lineup fetch failed for %s: %s", r["game_id"], exc)
                     break            # quota or outage; stop rather than burn calls
@@ -227,6 +240,11 @@ def fetch_lineups(client: af.Client | None = None, sport_id: str = "pl",
                     run.rows += 1
             log.info("stored %d lineups (%d api calls)", run.rows, client.calls)
             return run.rows
+
+
+def plan_restriction() -> str | None:
+    """The provider's own explanation, if the plan cannot serve current fixtures."""
+    return get_state(PLAN_STATE_KEY)
 
 
 def for_game(game_id: str) -> dict | None:

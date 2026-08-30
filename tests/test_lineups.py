@@ -235,3 +235,70 @@ def test_empty_lineup_response_is_not_an_error():
     lineups.sync_fixture_ids(c, "pl")
     now = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
     assert lineups.fetch_lineups(c, "pl", now=now) == 0
+
+
+# ---------------------------------------------------------------- plan coverage
+class RestrictedClient(StubClient):
+    """A valid key on a plan that does not reach the requested season. This is
+    what API-Football's free tier actually does for the current season."""
+
+    MESSAGE = "Free plans do not have access to this season, try from 2022 to 2024."
+
+    def fixtures(self, season, league=af.PREMIER_LEAGUE, date_from=None, date_to=None):
+        self.calls += 1
+        raise af.PlanRestriction(self.MESSAGE)
+
+
+def test_plan_restriction_is_parsed_from_a_200_response():
+    """The API returns HTTP 200 with an `errors` payload, so this must not be
+    mistaken for success."""
+    import requests
+
+    class R:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"errors": {"plan": RestrictedClient.MESSAGE}, "response": []}
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+    c = af.Client(key="k")
+    orig = requests.get
+    requests.get = lambda *a, **k: R()
+    try:
+        with pytest.raises(af.PlanRestriction) as exc:
+            c.fixtures(2026)
+    finally:
+        requests.get = orig
+    assert "does not have access" in str(exc.value).lower() or "not have access" in str(exc.value)
+
+
+def test_restriction_is_recorded_not_raised():
+    """A plan limit is a configuration fact, not an outage: the run completes and
+    the reason is stored so the page can explain the absence."""
+    _seed_fixture()
+    assert lineups.sync_fixture_ids(RestrictedClient(), "pl") == 0
+    assert RestrictedClient.MESSAGE in lineups.plan_restriction()
+
+
+def test_page_explains_the_restriction_even_though_a_key_exists(monkeypatch):
+    """Regression: limitations() checked only whether a key was configured, so
+    once a key existed the page stopped explaining why lineups were missing."""
+    from hypz import matchcard
+    monkeypatch.setenv(af.KEY_ENV, "a-configured-key")
+    _seed_fixture()
+    lineups.sync_fixture_ids(RestrictedClient(), "pl")
+    lim = matchcard.limitations()
+    assert "lineups" in lim
+    assert "plan" in lim["lineups"].lower()
+
+
+def test_restriction_clears_once_the_plan_covers_the_season():
+    _seed_fixture()
+    lineups.sync_fixture_ids(RestrictedClient(), "pl")
+    assert lineups.plan_restriction()
+    lineups.sync_fixture_ids(StubClient(), "pl")          # a plan that works
+    assert lineups.plan_restriction() is None

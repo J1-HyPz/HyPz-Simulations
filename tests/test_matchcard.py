@@ -7,6 +7,7 @@ match was in 2001, so the first version reported 9,225 days of "rest" and quoted
 import pytest
 
 from hypz import db, matchcard
+from hypz.adapters import api_football as af
 from hypz.adapters.base import GameRecord, SportConfig
 from hypz.ingest import ingest_results
 
@@ -38,6 +39,9 @@ def g(date, home, away, hs, aa, season="2026/27"):
 @pytest.fixture(autouse=True)
 def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    # Isolate from the host: whether a real key happens to be exported must not
+    # decide whether these pass.
+    monkeypatch.delenv(af.KEY_ENV, raising=False)
     db.init_db()
 
 
@@ -101,6 +105,7 @@ def test_schedule_window_is_inclusive_and_bounded():
 
 
 def test_card_reports_what_the_source_cannot_provide():
+    """With no lineup provider configured, both gaps are named explicitly."""
     _seed([g("2026-08-29", "A", "B", 1, 0)])
     s = matchcard.schedule("tst", days=7, today="2026-08-29")
     card = s["days"][0]["games"][0]

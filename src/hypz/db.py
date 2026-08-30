@@ -101,6 +101,14 @@ CREATE TABLE IF NOT EXISTS unmatched_names (
     PRIMARY KEY (sport_id, source, raw_name)
 );
 
+-- Small key/value store for facts the app learns about its own environment,
+-- such as which data a provider plan actually covers.
+CREATE TABLE IF NOT EXISTS app_state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS team_ratings (
     sport_id      TEXT NOT NULL,
     team_id       INTEGER NOT NULL REFERENCES teams(team_id),
@@ -203,6 +211,19 @@ class IngestRun:
         )
         self.conn.commit()
         return False
+
+
+def set_state(conn: sqlite3.Connection, key: str, value: str | None) -> None:
+    conn.execute(
+        "INSERT INTO app_state (key, value, updated_at) VALUES (?,?,?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+        (key, value, now_iso()))
+
+
+def get_state(key: str) -> str | None:
+    with connect() as conn:
+        row = conn.execute("SELECT value FROM app_state WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else None
 
 
 def set_watermark(conn: sqlite3.Connection, job: str, sport_id: str, through: str) -> None:

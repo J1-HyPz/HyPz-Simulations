@@ -35,6 +35,15 @@ class ApiFootballError(RuntimeError):
     pass
 
 
+class PlanRestriction(ApiFootballError):
+    """The key is valid but the plan does not cover what was asked for.
+
+    Distinct from a failure: nothing is broken and retrying will not help, so
+    callers record it and stop rather than treating it as an outage. These
+    responses do not count against the daily quota.
+    """
+
+
 class Client:
     def __init__(self, key: str | None = None, base: str = BASE):
         self.key = key or os.environ.get(KEY_ENV) or ""
@@ -60,7 +69,10 @@ class Client:
         # The API returns 200 with an `errors` payload rather than an HTTP error.
         errors = body.get("errors")
         if errors:
-            raise ApiFootballError(f"api error: {errors}")
+            text = str(errors)
+            if isinstance(errors, dict) and "plan" in errors:
+                raise PlanRestriction(str(errors["plan"]))
+            raise ApiFootballError(f"api error: {text}")
         out = body.get("response", [])
         if not isinstance(out, list):
             raise ApiFootballError(f"unexpected response shape for {path}")

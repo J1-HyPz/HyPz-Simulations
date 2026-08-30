@@ -84,10 +84,21 @@ docker compose up -d
 docker exec hypz-sim python -m hypz.cli lineups --sync
 ```
 
-A free account at [dashboard.api-football.com](https://dashboard.api-football.com)
-allows 100 requests a day, and this uses about eleven per matchweek: one to map
-fixture ids, then one per fixture, never repeated once a lineup is stored.
-`hypz lineups --quota` reports what is left.
+> **The free plan cannot serve the current season.** It covers 2022–2024 only;
+> asking for a current fixture returns
+> `Free plans do not have access to this season, try from 2022 to 2024.`
+> The integration is verified working against a covered season — fixtures, team
+> name resolution and lineup parsing all confirmed against live responses — but
+> lineups for upcoming matches need a paid tier. Rejected calls do not count
+> against the quota.
+
+When the plan does cover the season, this uses about eleven requests per matchweek:
+one to map fixture ids, then one per fixture, never repeated once a lineup is
+stored. `hypz lineups --quota` reports what is left.
+
+A plan limit is treated as a configuration fact rather than an outage: the run
+completes, the provider's own message is recorded in `app_state`, and the page
+says lineups are unavailable *and why*. It does not retry its way through the quota.
 
 The two sources name teams differently — "Manchester United" against "Man United" —
 so identifiers are resolved once by alias then fuzzy match, stored on the team row,
@@ -128,7 +139,7 @@ which is stronger evidence than any backtest.
 docker exec hypz-sim python -m pytest /app/tests -q
 ```
 
-57 tests, about two seconds. They cover the analytic gradient against numerical
+61 tests, about two seconds. They cover the analytic gradient against numerical
 differencing, the `as_of` cutoff that the whole backtest depends on, ingest
 idempotency and watermark contiguity, the leakage audit predicate, and two
 regressions for bugs found in Phase 3 (a stale watermark format, and a BOM that
