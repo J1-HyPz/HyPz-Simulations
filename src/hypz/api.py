@@ -28,18 +28,19 @@ SPORT = os.environ.get("HYPZ_SPORT", "pl")
 app = FastAPI(title="HyPz Simulations", docs_url="/api/docs", redoc_url=None)
 
 # Ratings change once a night at most; reloading per request would be pure waste.
-_cache: dict = {"fit": None, "as_of": None}
+_cache: dict = {}
 
 
-def _fit():
-    fit = ratings.load(SPORT)
+def _fit(sport_id: str | None = None):
+    sid = sport_id or SPORT
+    fit = ratings.load(sid)
     if fit is None:
-        raise HTTPException(503, "no ratings stored yet - run `hypz fit` or wait for "
-                                 "the scheduled model.ratings job")
-    if _cache["as_of"] != fit.as_of:
-        _cache.update(fit=fit, as_of=fit.as_of)
-        log.info("loaded ratings as of %s", fit.as_of)
-    return _cache["fit"]
+        raise HTTPException(503, f"no ratings stored for {sid} - run `hypz fit "
+                                 f"--sport {sid}` or wait for model.ratings")
+    if _cache.get(sid, {}).get("as_of") != fit.as_of:
+        _cache[sid] = {"fit": fit, "as_of": fit.as_of}
+        log.info("loaded %s ratings as of %s", sid, fit.as_of)
+    return _cache[sid]["fit"]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -62,9 +63,23 @@ def api_health():
                         status_code=200 if state == "ok" else 503)
 
 
+@app.get("/api/leagues")
+def api_leagues():
+    from . import leagues as lg
+    out = []
+    with connect() as conn:
+        counts = {r["sport_id"]: r["n"] for r in conn.execute(
+            "SELECT sport_id, COUNT(*) n FROM games GROUP BY sport_id")}
+    for lid, l in lg.LEAGUES.items():
+        out.append({"id": lid, "name": l.name, "country": l.country,
+                    "division": l.code, "teams": l.teams,
+                    "games": counts.get(lid, 0)})
+    return {"leagues": out}
+
+
 @app.get("/api/teams")
-def api_teams(min_weight: float = 5.0):
-    fit = _fit()
+def api_teams(min_weight: float = 5.0, league: str | None = None):
+    fit = _fit(league)
     return {"as_of": fit.as_of, "teams": [
         {"name": t, "attack": round(float(fit.attack[i]), 6),
          "defence": round(float(fit.defence[i]), 6),
@@ -73,9 +88,10 @@ def api_teams(min_weight: float = 5.0):
 
 
 @app.get("/api/forecast")
-def api_forecast(home: str = Query(...), away: str = Query(...)):
+def api_forecast(home: str = Query(...), away: str = Query(...),
+                 league: str | None = None):
     """Forecast any matchup. Closed form, so this is microseconds, not a simulation."""
-    fit = _fit()
+    fit = _fit(league)
     if home == away:
         raise HTTPException(400, "home and away must differ")
     for t in (home, away):
@@ -112,9 +128,12 @@ def api_fixtures():
 
 @app.get("/api/schedule")
 def api_schedule(days: int = Query(7, ge=1, le=30),
-                 back: int = Query(7, ge=0, le=30), start: str | None = None):
-    """Fixtures around today (or `start`): `back` days of results, `days` ahead."""
-    return matchcard.schedule(SPORT, days=days, today=start, back=back)
+                 back: int = Query(7, ge=0, le=30), start: str | None = None,
+                 league: str | None = None):
+    """Fixtures around today. Omit `league` for every league at once."""
+    if league:
+        return matchcard.schedule(league, days=days, today=start, back=back)
+    return matchcard.schedule_all(days=days, today=start, back=back)
 
 
 @app.get("/api/match/{game_id:path}")

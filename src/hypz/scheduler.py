@@ -18,9 +18,10 @@ from pathlib import Path
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from . import leagues as leagues_mod
 from .adapters.football_data import FootballDataAdapter
 from .export_web import export
-from .ingest import ingest_fixtures, ingest_results, load_matches
+from .ingest import ingest_fixtures, ingest_results, known_teams, load_matches
 from .models import dixon_coles
 from . import lineups as lineups_mod
 from . import ratings
@@ -45,11 +46,14 @@ def _run(name, fn, *args, **kwargs):
 
 
 def job_results():
-    _run("ingest.results", ingest_results, FootballDataAdapter())
+    for sid in leagues_mod.all_ids():
+        _run(f"ingest.results[{sid}]", ingest_results, FootballDataAdapter(sid))
 
 
 def job_fixtures():
-    _run("ingest.fixtures", ingest_fixtures, FootballDataAdapter())
+    # One upstream file serves every division, but each adapter filters its own.
+    for sid in leagues_mod.all_ids():
+        _run(f"ingest.fixtures[{sid}]", ingest_fixtures, FootballDataAdapter(sid))
 
 
 def job_lineups():
@@ -70,16 +74,18 @@ def job_lineups():
 
 
 def job_ratings():
-    def _fit_and_store():
-        m = load_matches("pl")
-        if m.empty:
-            return 0
-        return ratings.persist(dixon_coles.fit(m), "pl")
-    _run("model.ratings", _fit_and_store)
+    for sid in leagues_mod.all_ids():
+        def _fit_and_store(sid=sid):
+            m = load_matches(sid)
+            if m.empty:
+                return 0
+            return ratings.persist(dixon_coles.fit(m, teams=known_teams(sid)), sid)
+        _run(f"model.ratings[{sid}]", _fit_and_store)
 
 
 def job_forecast():
-    _run("model.forecast", forecast_scheduled, "pl")
+    for sid in leagues_mod.all_ids():
+        _run(f"model.forecast[{sid}]", forecast_scheduled, sid)
 
 
 def job_export():

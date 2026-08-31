@@ -4,9 +4,45 @@ Probabilistic forecasts for football and NFL fixtures. The output is always a
 distribution — *"Arsenal win 45.6% of the time, likeliest score 1–1"* — never a
 single predicted scoreline.
 
-**Status:** Phases 1–3 complete. Premier League forecasts run unattended on a
+**Status:** Eight leagues, Phases 1–3 complete. Premier League forecasts run unattended on a
 schedule, are recorded before kickoff, and are validated by walk-forward backtest
 against the market closing line.
+
+## Leagues
+
+| id | League | Country | Division | Matches |
+|---|---|---|---|---|
+| `pl` | Premier League | England | E0 | 12,634 |
+| `laliga` | La Liga | Spain | SP1 | 12,612 |
+| `seriea` | Serie A | Italy | I1 | 11,544 |
+| `bundesliga` | Bundesliga | Germany | D1 | 9,970 |
+| `ligue1` | Ligue 1 | France | F1 | 11,510 |
+| `eredivisie` | Eredivisie | Netherlands | N1 | 9,760 |
+| `primeira` | Primeira Liga | Portugal | P1 | 9,412 |
+| `championship` | Championship | England | E1 | 17,824 |
+
+95,266 matches, 420 teams, all back to 1993/94, each fitted separately. Adding one
+is a row in `leagues.py` — the adapter contract keeps the core ignorant of any
+particular competition and every table is already keyed by `sport_id`.
+
+Fitted home advantage varies more than expected: Serie A 0.120 against La Liga
+0.314. Fitting per league rather than pooling is what surfaces that.
+
+### Why there is no Champions League
+
+Two reasons, and the second is the real one.
+
+football-data.co.uk covers domestic leagues only — the UCL division 404s. That part
+is just a missing feed.
+
+The harder problem is that **ratings fitted per league are not comparable across
+leagues**. Each fit constrains its own attack parameters to sum to zero, so
+"+0.4" in the Eredivisie and "+0.4" in La Liga are separate scales, not one.
+Forecasting Arsenal against Real Madrid needs both on a common footing, which
+means either a joint fit with league-strength offsets estimated from the matches
+that actually cross leagues, or fitting on continental results directly — where
+each team plays six to thirteen games a season. That is a modelling change, not a
+data-plumbing one, and doing it badly would produce confident nonsense.
 
 ## Scope
 

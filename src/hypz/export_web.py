@@ -12,6 +12,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
+from . import leagues as leagues_mod
 from . import matchcard, ratings
 from .config import DB_PATH
 from .ingest import load_matches
@@ -113,12 +114,47 @@ def build_payload(sport_id: str = "pl", season: str = "2026/27",
         health = None
 
     try:
-        sched = matchcard.schedule(sport_id, days=7, back=7)
+        sched = matchcard.schedule_all(days=7, back=7)
     except Exception as exc:            # a page must still render without it
         log.warning("schedule unavailable: %s", exc)
         sched = None
 
+    # Every league's ratings, so the forecaster can switch without a round trip.
+    all_leagues = {}
+    for lid in leagues_mod.all_ids():
+        lf = ratings.load(lid)
+        if lf is None:
+            continue
+        lg = leagues_mod.get(lid)
+        con2 = sqlite3.connect(DB_PATH)
+        con2.row_factory = sqlite3.Row
+        try:
+            cur = sorted(r[0] for r in con2.execute(
+                "SELECT DISTINCT t.name FROM games g JOIN teams t "
+                "ON t.team_id IN (g.home_team_id, g.away_team_id) "
+                "WHERE g.sport_id=? AND g.season=?", (lid, season)))
+            nseasons = con2.execute(
+                "SELECT COUNT(DISTINCT season) FROM games WHERE sport_id=?", (lid,)
+            ).fetchone()[0]
+            ngames = con2.execute(
+                "SELECT COUNT(*) FROM games WHERE sport_id=?", (lid,)).fetchone()[0]
+        finally:
+            con2.close()
+        all_leagues[lid] = {
+            "name": lg.name, "country": lg.country, "as_of": lf.as_of,
+            "home_adv": round(lf.home_adv, 6), "rho": round(lf.rho, 6),
+            "n_matches": lf.n_matches, "seasons": nseasons, "games": ngames,
+            "current_teams": cur,
+            "teams": [{"name": t,
+                       "attack": round(float(lf.attack[i]), 6),
+                       "defence": round(float(lf.defence[i]), 6),
+                       "weight": round(float(lf.eff_weight[i]), 2)}
+                      for i, t in enumerate(lf.teams)],
+        }
+
     return {
+        "leagues": all_leagues,
+        "default_league": sport_id,
         "schedule": sched,
         "upcoming": upcoming,
         "health": health,

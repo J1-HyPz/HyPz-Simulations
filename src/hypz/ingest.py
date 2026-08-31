@@ -146,3 +146,17 @@ def load_matches(sport_id: str):
             (sport_id,),
         ).fetchall()
     return pd.DataFrame([dict(r) for r in rows])
+
+
+def known_teams(sport_id: str) -> list[str]:
+    """Every team the database knows for this league, including ones that appear
+    only in upcoming fixtures.
+
+    Fitting on the teams present in *results* alone leaves a newly promoted side
+    absent from the model, so its fixtures cannot be forecast at all. Passing the
+    full roster gives it the shrinkage prior instead - league average, honestly
+    labelled as thin evidence.
+    """
+    with connect() as conn:
+        return sorted(r["name"] for r in conn.execute(
+            "SELECT name FROM teams WHERE sport_id=?", (sport_id,)))

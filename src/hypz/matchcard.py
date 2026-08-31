@@ -250,6 +250,36 @@ def card(game_id: str, sport_id: str = "pl") -> dict | None:
         return out
 
 
+def schedule_all(days: int = 7, today: str | None = None, back: int = 7,
+                 sport_ids: list[str] | None = None) -> dict:
+    """One schedule across every league, grouped by day.
+
+    A combined view answers the question people actually have - what is on today -
+    which switching leagues one at a time does not.
+    """
+    from . import leagues as _lg
+    ids = sport_ids or _lg.all_ids()
+    now = today or date.today().isoformat()
+    days_map: dict[str, list] = {}
+    for sid in ids:
+        part = schedule(sid, days=days, today=now, back=back)
+        for day in part["days"]:
+            for g in day["games"]:
+                g["league"] = sid
+                g["league_name"] = _lg.get(sid).name
+            days_map.setdefault(day["date"], []).extend(day["games"])
+    for d in days_map:
+        days_map[d].sort(key=lambda g: (g.get("kickoff") or "99:99", g["home"]))
+    return {
+        "from": (date.fromisoformat(now) - timedelta(days=back)).isoformat(),
+        "to": (date.fromisoformat(now) + timedelta(days=days)).isoformat(),
+        "today": now,
+        "count": sum(len(v) for v in days_map.values()),
+        "days": [{"date": d, "games": days_map[d]} for d in sorted(days_map)],
+        "unavailable": limitations(),
+    }
+
+
 def schedule(sport_id: str = "pl", days: int = 7, today: str | None = None,
              back: int = 7) -> dict:
     """Fixtures around today: `back` days of results, `days` ahead of fixtures.

@@ -13,7 +13,7 @@ import logging
 import numpy as np
 
 from .db import IngestRun, connect, now_iso
-from .ingest import load_matches
+from .ingest import known_teams, load_matches
 from .models import dixon_coles
 
 log = logging.getLogger(__name__)
@@ -43,7 +43,8 @@ def forecast_scheduled(sport_id: str = "pl", half_life: float | None = None) -> 
         log.warning("no matches to fit on")
         return 0
     kw = {"half_life_days": half_life} if half_life else {}
-    fit = dixon_coles.fit(matches, **kw)
+    # Include teams that exist only in fixtures, so promoted sides are forecastable.
+    fit = dixon_coles.fit(matches, teams=known_teams(sport_id), **kw)
 
     with connect() as conn:
         with IngestRun(conn, job="model.forecast", sport_id=sport_id) as run:

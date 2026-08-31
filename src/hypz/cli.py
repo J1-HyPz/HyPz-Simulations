@@ -14,13 +14,19 @@ from . import health as health_mod
 from . import lineups as lineups_mod
 from . import matchcard
 from .adapters import api_football as af
-from .ingest import ingest_fixtures, ingest_results, load_matches
+from .ingest import ingest_fixtures, ingest_results, known_teams, load_matches
 from .predict import forecast_scheduled, scored_forecasts
 from . import backtest as bt
 from .export_web import export as export_web
 from .models import dixon_coles
 
-ADAPTERS = {"pl": FootballDataAdapter}
+from . import leagues as leagues_mod
+
+def adapter_for(sport_id: str) -> FootballDataAdapter:
+    return FootballDataAdapter(sport_id)
+
+
+ADAPTERS = leagues_mod.all_ids()
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -36,16 +42,46 @@ def cmd_init(args) -> None:
     print("schema initialised")
 
 
+def cmd_leagues(args) -> None:
+    from .db import connect as _c
+    with _c() as conn:
+        counts = {r["sport_id"]: r["n"] for r in conn.execute(
+            "SELECT sport_id, COUNT(*) n FROM games GROUP BY sport_id")}
+    print(f"\n{'id':<14}{'league':<18}{'country':<14}{'div':<6}{'teams':>6}{'games':>9}")
+    print("-" * 68)
+    for lid, lg in leagues_mod.LEAGUES.items():
+        print(f"{lid:<14}{lg.name:<18}{lg.country:<14}{lg.code:<6}"
+              f"{lg.teams:>6}{counts.get(lid, 0):>9}")
+
+
+def _targets(args) -> list[str]:
+    return leagues_mod.all_ids() if getattr(args, "all_leagues", False) else [args.sport]
+
+
 def cmd_ingest(args) -> None:
-    adapter = ADAPTERS[args.sport]()
+    total, failed = 0, []
     seasons = args.seasons.split(",") if args.seasons else None
-    n = ingest_results(adapter, seasons, force=args.force)
-    print(f"ingested {n} records")
+    for sid in _targets(args):
+        try:
+            n = ingest_results(adapter_for(sid), seasons, force=args.force)
+        except Exception as exc:
+            # One league's source being down must not cost the others their run.
+            failed.append((sid, exc))
+            print(f"  {sid:<14} FAILED  {str(exc)[:60]}")
+            continue
+        print(f"  {sid:<14} {n:>6} records")
+        total += n
+    print(f"ingested {total} records"
+          + (f", {len(failed)} league(s) failed" if failed else ""))
 
 
 def cmd_fixtures(args) -> None:
-    n = ingest_fixtures(ADAPTERS[args.sport]())
-    print(f"ingested {n} fixtures")
+    for sid in _targets(args):
+        try:
+            n = ingest_fixtures(adapter_for(sid))
+            print(f"  {sid:<14} {n:>4} fixtures")
+        except Exception as exc:
+            print(f"  {sid:<14} FAILED  {str(exc)[:60]}")
 
 
 def cmd_predict(args) -> None:
@@ -161,7 +197,8 @@ def cmd_fit(args) -> None:
     matches = load_matches(args.sport)
     if matches.empty:
         raise SystemExit("no matches - run ingest first")
-    fit = dixon_coles.fit(matches, half_life_days=args.half_life)
+    fit = dixon_coles.fit(matches, half_life_days=args.half_life,
+                          teams=known_teams(args.sport))
 
     strength = fit.attack - fit.defence
     # Long-relegated sides carry almost no decayed weight; their ratings are the
@@ -341,46 +378,49 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("init").set_defaults(func=cmd_init)
+    sub.add_parser("leagues").set_defaults(func=cmd_leagues)
 
     s = sub.add_parser("ingest"); s.set_defaults(func=cmd_ingest)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
     s.add_argument("--seasons", help="comma-separated, e.g. 2024/25,2025/26")
     s.add_argument("--force", action="store_true", help="ignore the watermark, refetch all")
+    s.add_argument("--all-leagues", action="store_true", help="every configured league")
 
     s = sub.add_parser("fixtures"); s.set_defaults(func=cmd_fixtures)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
+    s.add_argument("--all-leagues", action="store_true", help="every configured league")
 
     s = sub.add_parser("predict"); s.set_defaults(func=cmd_predict)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
     s.add_argument("--show", action="store_true")
 
     sub.add_parser("health").set_defaults(func=cmd_health)
 
     s = sub.add_parser("track"); s.set_defaults(func=cmd_track)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
 
     sub.add_parser("status").set_defaults(func=cmd_status)
 
     s = sub.add_parser("fit"); s.set_defaults(func=cmd_fit)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
     s.add_argument("--half-life", type=float, default=270.0)
     s.add_argument("--top", type=int, default=20)
     s.add_argument("--min-weight", type=float, default=5.0,
                    help="hide teams with less than this many decayed matches")
 
     s = sub.add_parser("forecast"); s.set_defaults(func=cmd_forecast)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
     s.add_argument("--half-life", type=float, default=270.0)
     s.add_argument("--match", help='e.g. "Arsenal vs Chelsea"')
     s.add_argument("-n", type=int, default=10)
 
     s = sub.add_parser("export-web"); s.set_defaults(func=cmd_export_web)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
     s.add_argument("--season", default="2026/27")
     s.add_argument("--out", default="/data/web/fixture-model.html")
 
     s = sub.add_parser("backtest"); s.set_defaults(func=cmd_backtest)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
     s.add_argument("--start", default="2012-08-01")
     s.add_argument("--refit-days", type=int, default=7)
     s.add_argument("--half-life", type=float, default=270.0)
@@ -388,13 +428,13 @@ def main() -> None:
     s.add_argument("--out", help="write per-match predictions to CSV")
 
     s = sub.add_parser("schedule"); s.set_defaults(func=cmd_schedule)
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
     s.add_argument("--days", type=int, default=7)
     s.add_argument("--start", help="ISO date; defaults to today")
 
     s = sub.add_parser("match"); s.set_defaults(func=cmd_match)
     s.add_argument("game_id")
-    s.add_argument("--sport", default="pl", choices=ADAPTERS)
+    s.add_argument("--sport", default=leagues_mod.DEFAULT, choices=ADAPTERS)
 
     s = sub.add_parser("lineups"); s.set_defaults(func=cmd_lineups)
     s.add_argument("--sync", action="store_true", help="refresh fixture id mapping first")

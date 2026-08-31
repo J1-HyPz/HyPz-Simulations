@@ -167,7 +167,8 @@ table.mx td.peak{box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--ink)}
 details.g{background:var(--surface-2); border-radius:8px; margin-bottom:4px; overflow:hidden}
 details.g[open]{background:var(--surface-2); box-shadow:inset 0 0 0 1px var(--line-2)}
 details.g summary{list-style:none; cursor:pointer; padding:11px 13px;
-  display:grid; grid-template-columns:52px minmax(0,1fr) 150px 18px; gap:12px; align-items:center}
+  display:grid; grid-template-columns:52px 74px minmax(0,1fr) 150px 18px; gap:12px;
+  align-items:center}
 details.g summary::-webkit-details-marker{display:none}
 details.g summary:hover{background:var(--line)}
 details.g summary:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
@@ -202,6 +203,19 @@ details.g[open] .chev{transform:rotate(90deg)}
   font-size:12px; color:var(--muted); line-height:1.5}
 .formation{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-2);
   background:var(--surface-2); padding:2px 7px; border-radius:4px; margin-left:7px}
+.chips{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px}
+.chip2{font-size:12.5px; padding:6px 13px; border-radius:20px; cursor:pointer;
+  background:var(--surface); border:1px solid var(--line); color:var(--ink-2);
+  transition:background .15s, color .15s, border-color .15s; white-space:nowrap}
+.chip2:hover{border-color:var(--line-2); color:var(--ink)}
+.chip2.on{background:var(--ink); border-color:var(--ink); color:var(--ground); font-weight:500}
+.chip2:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.lgtag{font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--muted); background:var(--surface);
+  border:1px solid var(--line); border-radius:4px; padding:2px 6px; white-space:nowrap}
+.lgpick{display:flex; align-items:center; gap:10px; margin-bottom:14px}
+.lgpick select{width:auto; min-width:190px; font-size:14px; padding:8px 11px; padding-right:34px}
+.lgpick .meta{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted)}
 .tug{display:grid; gap:6px}
 .tug .row{display:grid; grid-template-columns:34px 1fr 34px; gap:9px; align-items:center;
   font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-variant-numeric:tabular-nums}
@@ -319,6 +333,7 @@ footer{margin-top:52px; padding-top:24px; border-top:1px solid var(--line)}
     <h2>Recent results and what is coming</h2>
     <p id="sched-note"></p>
   </div>
+  <div class="chips" id="lgfilter"></div>
   <div id="schedule"></div>
   <p class="caveat" id="sched-caveat"></p>
   <div class="hz" id="hz"></div>
@@ -332,6 +347,11 @@ footer{margin-top:52px; padding-top:24px; border-top:1px solid var(--line)}
        browser rather than asking a server.</p>
   </div>
 
+  <div class="lgpick">
+    <label for="fc-league" style="margin:0">League</label>
+    <select id="fc-league"></select>
+    <span class="meta" id="fc-meta"></span>
+  </div>
   <div class="picker">
     <div class="field"><label for="home">Home team</label><select id="home"></select></div>
     <button id="swap" title="Swap home and away" aria-label="Swap home and away">&#8646;</button>
@@ -383,6 +403,11 @@ footer{margin-top:52px; padding-top:24px; border-top:1px solid var(--line)}
     <p>Net strength in log-goal units, attack minus defence. Bars run from a common
        zero so the spread between sides is the thing you read, not the numbers.
        Teams with too little recent evidence are excluded rather than shown at the prior.</p>
+  </div>
+  <div class="lgpick">
+    <label for="rt-league" style="margin:0">League</label>
+    <select id="rt-league"></select>
+    <span class="meta" id="rt-meta"></span>
   </div>
   <div class="card">
     <div class="rthead"><span>#</span><span>Team</span><span>Weaker &nbsp;&#8212;&nbsp; Stronger</span><span>Net</span></div>
@@ -453,7 +478,14 @@ footer{margin-top:52px; padding-top:24px; border-top:1px solid var(--line)}
 
 <script>
 const M = __MODEL_JSON__;
-const T = Object.fromEntries(M.teams.map(t => [t.name, t]));
+
+// One payload carries every league; these track which one each panel is showing.
+const LEAGUES = M.leagues || {};
+const LG_IDS = Object.keys(LEAGUES);
+let fcLeague = M.default_league || LG_IDS[0];
+let rtLeague = fcLeague;
+const lg = id => LEAGUES[id] || {};
+let T = Object.fromEntries((lg(fcLeague).teams || M.teams).map(t => [t.name, t]));
 const MAXG = 10;
 const F = [1,1,2,6,24,120,720,5040,40320,362880,3628800];
 
@@ -464,8 +496,9 @@ const esc = t => String(t).replace(/[&<>"]/g,
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 function rates(h, a){
-  const H = T[h], A = T[a];
-  return [Math.exp(H.attack + A.defence + M.home_adv), Math.exp(A.attack + H.defence)];
+  const H = T[h], A = T[a], p = lg(fcLeague);
+  return [Math.exp(H.attack + A.defence + p.home_adv),
+          Math.exp(A.attack + H.defence)];
 }
 
 function matrix(h, a){
@@ -477,10 +510,11 @@ function matrix(h, a){
     for (let j = 0; j <= MAXG; j++) m[i][j] = pois(i, lam) * pois(j, mu);
   }
   // Dixon-Coles low-score dependence correction
-  m[0][0] *= 1 - lam*mu*M.rho;
-  m[0][1] *= 1 + lam*M.rho;
-  m[1][0] *= 1 + mu*M.rho;
-  m[1][1] *= 1 - M.rho;
+  const rho = lg(fcLeague).rho;
+  m[0][0] *= 1 - lam*mu*rho;
+  m[0][1] *= 1 + lam*rho;
+  m[1][0] *= 1 + mu*rho;
+  m[1][1] *= 1 - rho;
   let s = 0;
   for (let i = 0; i <= MAXG; i++) for (let j = 0; j <= MAXG; j++){ m[i][j] = Math.max(m[i][j], 0); s += m[i][j]; }
   for (let i = 0; i <= MAXG; i++) for (let j = 0; j <= MAXG; j++) m[i][j] /= s;
@@ -545,20 +579,42 @@ function render(){
   }).join("");
 }
 
-// ---- team pickers ----
+// ---- league and team pickers ----
 const homeSel = document.getElementById("home"), awaySel = document.getElementById("away");
-const current = M.current_teams;
-const others = M.teams.filter(t => t.weight >= 5 && !current.includes(t.name))
-                      .map(t => t.name).sort();
-const opts =
-  `<optgroup label="${M.current_season}">` + current.map(t => `<option>${t}</option>`).join("") + "</optgroup>" +
-  (others.length ? `<optgroup label="Recently relegated">` + others.map(t => `<option>${t}</option>`).join("") + "</optgroup>" : "");
-homeSel.innerHTML = opts; awaySel.innerHTML = opts;
-homeSel.value = "Arsenal"; awaySel.value = "Man City";
+
+function leagueOptions(sel, active){
+  sel.innerHTML = LG_IDS.map(id =>
+    `<option value="${id}"${id === active ? " selected" : ""}>${esc(lg(id).name)}</option>`).join("");
+}
+
+function buildPickers(){
+  const p = lg(fcLeague);
+  T = Object.fromEntries((p.teams || []).map(t => [t.name, t]));
+  const current = p.current_teams || [];
+  const others = (p.teams || []).filter(t => t.weight >= 5 && !current.includes(t.name))
+                                .map(t => t.name).sort();
+  const opts =
+    `<optgroup label="${esc(p.name)} today">` +
+      current.map(t => `<option>${esc(t)}</option>`).join("") + "</optgroup>" +
+    (others.length ? `<optgroup label="Not in this season">` +
+      others.map(t => `<option>${esc(t)}</option>`).join("") + "</optgroup>" : "");
+  homeSel.innerHTML = opts; awaySel.innerHTML = opts;
+  homeSel.selectedIndex = 0;
+  awaySel.value = current[1] || current[0];
+  document.getElementById("fc-meta").textContent =
+    `${p.n_matches.toLocaleString()} matches \u00b7 home advantage ${p.home_adv.toFixed(3)} \u00b7 \u03c1 ${p.rho.toFixed(3)}`;
+}
+
+leagueOptions(document.getElementById("fc-league"), fcLeague);
+document.getElementById("fc-league").onchange = e => {
+  fcLeague = e.target.value;
+  buildPickers();
+  render();
+};
 
 function guard(changed){
   if (homeSel.value === awaySel.value){
-    const pool = current.filter(t => t !== homeSel.value);
+    const pool = (lg(fcLeague).current_teams || []).filter(t => t !== homeSel.value);
     (changed === homeSel ? awaySel : homeSel).value = pool[0];
   }
   render();
@@ -569,6 +625,8 @@ document.getElementById("swap").onclick = () => {
   [homeSel.value, awaySel.value] = [awaySel.value, homeSel.value];
   render();
 };
+
+buildPickers();
 
 // ---- hover tooltip on matrix cells ----
 const tip = document.getElementById("tip");
@@ -620,22 +678,30 @@ const spy = new IntersectionObserver(entries => {
 }, {rootMargin: "-56px 0px -70% 0px", threshold: 0});
 document.querySelectorAll("section.band").forEach(sec => spy.observe(sec));
 
-const live = M.teams.filter(t => t.weight >= 5)
-  .map(t => ({...t, net: t.attack - t.defence})).sort((a, b) => b.net - a.net);
-const spanMax = Math.max(...live.map(t => Math.abs(t.net))) || 1;
-const currentSet = new Set(M.current_teams);
-document.getElementById("ratings-list").innerHTML = live.map((t, k) => {
-  const pos = t.net >= 0;
-  const w = (Math.abs(t.net) / spanMax * 50).toFixed(1);
-  const thin = t.weight < 30 && currentSet.has(t.name);
-  return `<div class="rt" title="attack ${t.attack.toFixed(3)}, defence ${t.defence.toFixed(3)}, ${t.weight.toFixed(0)} decayed matches">
-    <span class="rk">${k + 1}</span>
-    <span class="nm">${esc(t.name)}${currentSet.has(t.name) ? "" : ' <small>relegated</small>'}${
-      thin ? ' <small>thin record</small>' : ""}</span>
-    <span class="track"><i class="zero"></i><i class="b ${pos ? "pos" : "neg"}" style="width:${w}%"></i></span>
-    <span class="val">${pos ? "+" : ""}${t.net.toFixed(3)}</span>
-  </div>`;
-}).join("");
+function renderRatings(){
+  const p = lg(rtLeague);
+  const live = (p.teams || []).filter(t => t.weight >= 5)
+    .map(t => ({...t, net: t.attack - t.defence})).sort((a, b) => b.net - a.net);
+  const spanMax = Math.max(...live.map(t => Math.abs(t.net))) || 1;
+  const currentSet = new Set(p.current_teams || []);
+  document.getElementById("rt-meta").textContent =
+    `${live.length} of ${(p.teams || []).length} teams above 5 decayed matches \u00b7 fitted to ${p.as_of}`;
+  document.getElementById("ratings-list").innerHTML = live.map((t, k) => {
+    const pos = t.net >= 0;
+    const w = (Math.abs(t.net) / spanMax * 50).toFixed(1);
+    const thin = t.weight < 30 && currentSet.has(t.name);
+    return `<div class="rt" title="attack ${t.attack.toFixed(3)}, defence ${t.defence.toFixed(3)}, ${t.weight.toFixed(0)} decayed matches">
+      <span class="rk">${k + 1}</span>
+      <span class="nm">${esc(t.name)}${currentSet.has(t.name) ? "" : ' <small>not this season</small>'}${
+        thin ? ' <small>thin record</small>' : ""}</span>
+      <span class="track"><i class="zero"></i><i class="b ${pos ? "pos" : "neg"}" style="width:${w}%"></i></span>
+      <span class="val">${pos ? "+" : ""}${t.net.toFixed(3)}</span>
+    </div>`;
+  }).join("");
+}
+leagueOptions(document.getElementById("rt-league"), rtLeague);
+document.getElementById("rt-league").onchange = e => { rtLeague = e.target.value; renderRatings(); };
+renderRatings();
 
 try { render(); } catch (e) { console.error('render failed', e); }
 
@@ -726,18 +792,20 @@ function gameDetail(g){
   return `<div class="gd">${blocks}</div>`;
 }
 
-if (M.schedule && M.schedule.count){
+function renderSchedule(filter){
   const S = M.schedule;
   const nplayed = S.days.flatMap(d => d.games).filter(g => g.status === "final").length;
   document.getElementById("sched-note").textContent =
     `${nplayed} played and ${S.count - nplayed} upcoming, ${S.from} to ${S.to}. ` +
     `Open any match for form, head to head, lineups and statistics.`;
   document.getElementById("schedule").innerHTML = S.days.map(day => {
+    const games = filter === "all" ? day.games : day.games.filter(g => g.league === filter);
+    if (!games.length) return "";
     const heading = new Date(day.date + "T00:00:00Z").toLocaleDateString("en-GB",
       {weekday:"long", day:"numeric", month:"long", timeZone:"UTC"});
     const isToday = day.date === S.today
       ? ` <span style="color:var(--accent)">&middot; today</span>` : "";
-    return `<div class="day"><h3>${heading}${isToday}</h3>` + day.games.map(g => {
+    return `<div class="day"><h3>${heading}${isToday}</h3>` + games.map(g => {
       const played = g.status === "final" && g.result;
       const right = played
         ? `<span class="ft">${g.result.score.home}&ndash;${g.result.score.away}</span>`
@@ -750,8 +818,9 @@ if (M.schedule && M.schedule.count){
           : `<span class="ko" style="text-align:right">no forecast</span>`;
       const hw = played && g.result.score.home > g.result.score.away;
       const aw = played && g.result.score.away > g.result.score.home;
-      return `<details class="g"><summary>
+      return `<details class="g" data-league="${g.league || ""}"><summary>
           <span class="ko">${g.kickoff || "&ndash;&ndash;:&ndash;&ndash;"}</span>
+          <span class="lgtag">${esc(g.league_name || "")}</span>
           <span class="tm">${hw?"<b>":""}${esc(g.home)}${hw?"</b>":""}
             <span style="color:var(--muted)">v</span>
             ${aw?"<b>":""}${esc(g.away)}${aw?"</b>":""}</span>
@@ -759,9 +828,35 @@ if (M.schedule && M.schedule.count){
         </summary>${gameDetail(g)}</details>`;
     }).join("") + `</div>`;
   }).join("");
+  const shown = document.querySelectorAll("#schedule details.g").length;
+  document.getElementById("sched-note").textContent =
+    filter === "all"
+      ? `${nplayed} played and ${S.count - nplayed} upcoming across ${LG_IDS.length} leagues, ` +
+        `${S.from} to ${S.to}. Open any match for form, head to head, lineups and statistics.`
+      : `${shown} ${lg(filter).name} ${shown === 1 ? "match" : "matches"}, ${S.from} to ${S.to}.`;
   document.getElementById("sched-caveat").innerHTML =
     `Not shown, because the data source does not carry it: ` +
     Object.entries(S.unavailable).map(([k,v]) => `<b>${k}</b> (${esc(v)})`).join("; ") + ".";
+}
+
+
+if (M.schedule && M.schedule.count){
+  const counts = {all: M.schedule.count};
+  M.schedule.days.forEach(d => d.games.forEach(g => {
+    counts[g.league] = (counts[g.league] || 0) + 1;
+  }));
+  const opts = [["all", "All leagues"]].concat(
+    LG_IDS.filter(id => counts[id]).map(id => [id, lg(id).name]));
+  document.getElementById("lgfilter").innerHTML = opts.map(([id, name], i) =>
+    `<button class="chip2${i === 0 ? " on" : ""}" data-f="${id}">${esc(name)}
+      <span style="opacity:.6">${counts[id]}</span></button>`).join("");
+  document.getElementById("lgfilter").addEventListener("click", e => {
+    const b = e.target.closest(".chip2");
+    if (!b) return;
+    document.querySelectorAll("#lgfilter .chip2").forEach(x => x.classList.toggle("on", x === b));
+    renderSchedule(b.dataset.f);
+  });
+  renderSchedule("all");
 }
 
 if (M.health){

@@ -17,6 +17,13 @@ from .base import GameRecord, SportAdapter, SportConfig
 
 log = logging.getLogger(__name__)
 
+def looks_like_csv(raw: bytes) -> bool:
+    """The server answers 200 with an HTML error page for a season it has not
+    published yet, rather than 404. Content has to be checked, not the status."""
+    head = raw.lstrip()[:200].lower()
+    return not head.startswith(b"<") and b"div," in head
+
+
 def _strip_bom(raw: bytes) -> bytes:
     """These files are UTF-8-with-BOM but carry stray non-UTF8 bytes in referee
     names, so they are parsed as latin-1. That decodes the BOM to mojibake rather
@@ -25,9 +32,8 @@ def _strip_bom(raw: bytes) -> bytes:
     return raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
 
 
-BASE_URL = "https://www.football-data.co.uk/mmz4281/{code}/E0.csv"
+BASE_URL = "https://www.football-data.co.uk/mmz4281/{season}/{div}.csv"
 FIXTURES_URL = "https://www.football-data.co.uk/fixtures.csv"
-DIVISION = "E0"
 
 # Team-level match statistics the results feed carries and we previously dropped.
 # Column pairs are (home, away) -> our key.
@@ -40,14 +46,6 @@ STAT_COLUMNS = {
     ("HR", "AR"): "reds",
 }
 FIRST_SEASON_START = 1993
-
-CONFIG = SportConfig(
-    sport_id="pl",
-    name="English Premier League",
-    simulation_unit="match_goals",
-    extra={"country": "England", "tier": 1, "teams_per_season": 20,
-           "matches_per_season": 380},
-)
 
 
 def season_code(start_year: int) -> str:
@@ -67,15 +65,31 @@ def current_season_start(today: date | None = None) -> int:
 
 
 class FootballDataAdapter(SportAdapter):
-    config = CONFIG
+    """One instance per league. The division code is the only thing that varies."""
 
-    def __init__(self, timeout: int = 30):
+    def __init__(self, sport_id: str = "pl", timeout: int = 30):
+        from ..leagues import get as _league
+        self.league = _league(sport_id)
+        self.division = self.league.code
+        self.config = SportConfig(
+            sport_id=self.league.sport_id,
+            name=self.league.name,
+            simulation_unit="match_goals",
+            extra={"country": self.league.country,
+                   "division": self.league.code,
+                   "teams_per_season": self.league.teams,
+                   "matches_per_season": self.league.matches_per_season},
+        )
         self.timeout = timeout
-        self.raw_dir = RAW_DIR / "football-data" / "E0"
+        self.raw_dir = RAW_DIR / "football-data" / self.division
         self.raw_dir.mkdir(parents=True, exist_ok=True)
 
     def current_season_year(self) -> int:
         return current_season_start()
+
+    @property
+    def first_season(self) -> int:
+        return self.league.first_season
 
     def seasons_after(self, start_year: int) -> list[str]:
         """Seasons strictly after `start_year`, up to and including the current one.
@@ -83,23 +97,28 @@ class FootballDataAdapter(SportAdapter):
         The current season is always included even when it is also the watermark:
         it keeps gaining matches, so it is never finished.
         """
-        first = max(start_year + 1, FIRST_SEASON_START)
+        first = max(start_year + 1, self.first_season)
         return [season_label(y) for y in range(min(first, current_season_start()),
                                                current_season_start() + 1)]
 
     def available_seasons(self) -> list[str]:
         return [
             season_label(y)
-            for y in range(FIRST_SEASON_START, current_season_start() + 1)
+            for y in range(self.first_season, current_season_start() + 1)
         ]
 
     def _fetch_raw(self, start_year: int) -> bytes | None:
         code = season_code(start_year)
-        resp = requests.get(BASE_URL.format(code=code), timeout=self.timeout)
+        resp = requests.get(BASE_URL.format(season=code, div=self.division),
+                            timeout=self.timeout)
         if resp.status_code == 404:
             log.warning("season %s not published yet (404)", season_label(start_year))
             return None
         resp.raise_for_status()
+        if not looks_like_csv(_strip_bom(resp.content)):
+            log.warning("%s %s: not published yet (server returned a page, not a CSV)",
+                        self.division, season_label(start_year))
+            return None
         # Raw store first, parse second.
         (self.raw_dir / f"{code}.csv").write_bytes(resp.content)
         return resp.content
@@ -115,12 +134,20 @@ class FootballDataAdapter(SportAdapter):
         required = {"Date", "HomeTeam", "AwayTeam", "FTHG", "FTAG"}
         missing = required - set(df.columns)
         if missing:
-            raise ValueError(f"{season_label(start_year)} missing columns: {sorted(missing)}")
+            # Skip rather than raise: one malformed season file must not abort a
+            # backfill spanning three decades and eight leagues.
+            log.warning("%s %s: skipping, missing columns %s",
+                        self.division, season_label(start_year), sorted(missing))
+            return []
 
         df = df.dropna(subset=["HomeTeam", "AwayTeam", "FTHG", "FTAG"])
         # Date is dd/mm/yy in early files and dd/mm/yyyy later; 'mixed' handles both.
         dates = pd.to_datetime(df["Date"], dayfirst=True, format="mixed", errors="coerce")
-        df = df.assign(match_date=dates).dropna(subset=["match_date"])
+        # copy() first: these files have ~100 columns and assigning into the view
+        # raises a fragmentation warning on every season of every league.
+        df = df.copy()
+        df["match_date"] = dates
+        df = df.dropna(subset=["match_date"])
 
         label = season_label(start_year)
         records: list[GameRecord] = []
@@ -145,6 +172,15 @@ class FootballDataAdapter(SportAdapter):
                 val = getattr(row, src, None)
                 if val is not None and pd.notna(val):
                     extra.setdefault("half_time", {})[dst] = int(val)
+            # Expected goals appear in recent seasons for most divisions. Stored
+            # whenever present so the history accumulates without a re-ingest.
+            for src, dst in (("HxG", "h"), ("AxG", "a")):
+                val = getattr(row, src, None)
+                if val is not None and pd.notna(val):
+                    try:
+                        extra.setdefault("xg", {})[dst] = float(val)
+                    except (TypeError, ValueError):
+                        pass
             ref = getattr(row, "Referee", None)
             if ref is not None and pd.notna(ref) and str(ref).strip():
                 extra["referee"] = str(ref).strip()
@@ -178,7 +214,7 @@ class FootballDataAdapter(SportAdapter):
 
         df = pd.read_csv(BytesIO(_strip_bom(resp.content)), encoding="latin-1",
                          on_bad_lines="skip", low_memory=False)
-        df = df[df["Div"] == DIVISION].dropna(subset=["HomeTeam", "AwayTeam", "Date"])
+        df = df[df["Div"] == self.division].dropna(subset=["HomeTeam", "AwayTeam", "Date"])
         dates = pd.to_datetime(df["Date"], dayfirst=True, format="mixed", errors="coerce")
         df = df.assign(match_date=dates).dropna(subset=["match_date"])
 
@@ -203,12 +239,12 @@ class FootballDataAdapter(SportAdapter):
                 away_team=str(row.AwayTeam).strip(),
                 extra=extra,
             ))
-        log.info("%d upcoming %s fixtures", len(out), DIVISION)
+        log.info("%d upcoming %s fixtures", len(out), self.division)
         return out
 
     def fetch_results(self, seasons: list[str] | None = None) -> list[GameRecord]:
         wanted = (
-            range(FIRST_SEASON_START, current_season_start() + 1)
+            range(self.first_season, current_season_start() + 1)
             if seasons is None
             else [int(s.split("/")[0]) for s in seasons]
         )
